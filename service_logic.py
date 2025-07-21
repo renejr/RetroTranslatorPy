@@ -1,0 +1,272 @@
+# service_logic.py
+
+import base64
+import io
+from fastapi import HTTPException
+from PIL import Image, ImageDraw, ImageFont
+import textwrap
+
+# Importa as funções dos nossos módulos especializados
+from models import RetroArchRequest
+from ocr_module import extract_text_from_image, extract_text_with_positions
+from translation_module import translate_text
+
+def create_translation_image(text: str, width: int = 800, height: int = 200) -> str:
+    """
+    Cria uma imagem com o texto traduzido e retorna como base64.
+    
+    Args:
+        text: O texto traduzido a ser exibido
+        width: Largura da imagem
+        height: Altura da imagem
+        
+    Returns:
+        String base64 da imagem PNG
+    """
+    # Cria uma imagem com fundo semi-transparente
+    img = Image.new('RGBA', (width, height), (0, 0, 0, 180))  # Fundo preto semi-transparente
+    draw = ImageDraw.Draw(img)
+    
+    try:
+        # Tenta usar uma fonte do sistema
+        font = ImageFont.truetype("arial.ttf", 16)
+    except:
+        try:
+            # Fallback para fonte padrão do PIL
+            font = ImageFont.load_default()
+        except:
+            font = None
+    
+    # Quebra o texto em linhas para caber na imagem
+    max_chars_per_line = width // 10  # Aproximadamente
+    lines = textwrap.wrap(text, width=max_chars_per_line)
+    
+    # Limita o número de linhas para caber na altura
+    max_lines = height // 20  # Aproximadamente
+    if len(lines) > max_lines:
+        lines = lines[:max_lines-1]
+        lines.append("...")
+    
+    # Desenha o texto
+    y_offset = 10
+    for line in lines:
+        draw.text((10, y_offset), line, fill=(255, 255, 255, 255), font=font)  # Texto branco
+        y_offset += 20
+    
+    # Salva a imagem overlay no diretório para debug/comparação
+    overlay_filename = "overlay_translation_debug.png"
+    img.save(overlay_filename)
+    print(f"Overlay salvo como: {overlay_filename}")
+    
+    # Converte para base64
+    buffer = io.BytesIO()
+    img.save(buffer, format='PNG')
+    img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    
+    return img_base64
+
+def save_debug_images(original_image_data: bytes, overlay_base64: str, original_width: int, original_height: int):
+    """Salva imagens para debug e comparação visual"""
+    try:
+        # Salva imagem original
+        with open("debug_original.png", "wb") as f:
+            f.write(original_image_data)
+        
+        # Cria versão combinada (original + overlay)
+        original_img = Image.open(io.BytesIO(original_image_data))
+        overlay_data = base64.b64decode(overlay_base64)
+        overlay_img = Image.open(io.BytesIO(overlay_data))
+        
+        # Combina as imagens
+        combined = original_img.copy()
+        combined.paste(overlay_img, (0, 0), overlay_img)  # overlay_img como máscara de transparência
+        
+        # Salva versão combinada
+        combined.save("debug_combined_result.png")
+        print("Imagens de debug salvas: debug_original.png, overlay_translation_debug.png, debug_combined_result.png")
+        
+    except Exception as e:
+        print(f"Erro ao salvar imagens de debug: {e}")
+
+def create_positioned_translation_image(detections_with_translations: list, original_width: int = 800, original_height: int = 600) -> str:
+    """
+    Cria uma imagem overlay com traduções posicionadas individualmente.
+    
+    Args:
+        detections_with_translations: Lista de dicionários com 'text', 'translation', 'bbox', 'confidence'
+        original_width: Largura da imagem original
+        original_height: Altura da imagem original
+        
+    Returns:
+        String base64 da imagem PNG overlay
+    """
+    # Cria uma imagem transparente do tamanho original
+    img = Image.new('RGBA', (original_width, original_height), (0, 0, 0, 0))  # Completamente transparente
+    draw = ImageDraw.Draw(img)
+    
+    try:
+        # Tenta usar uma fonte do sistema
+        font_small = ImageFont.truetype("arial.ttf", 14)
+        font_medium = ImageFont.truetype("arial.ttf", 16)
+        font_large = ImageFont.truetype("arial.ttf", 18)
+    except:
+        try:
+            # Fallback para fonte padrão do PIL
+            font_small = ImageFont.load_default()
+            font_medium = ImageFont.load_default()
+            font_large = ImageFont.load_default()
+        except:
+            font_small = font_medium = font_large = None
+    
+    print(f"Criando overlay com {len(detections_with_translations)} traduções posicionadas")
+    
+    for i, detection in enumerate(detections_with_translations):
+        text = detection['text']
+        translation = detection['translation']
+        bbox = detection['bbox']
+        confidence = detection['confidence']
+        
+        # Calcula o centro da bbox original
+        # bbox é uma lista de 4 pontos: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+        x_coords = [point[0] for point in bbox]
+        y_coords = [point[1] for point in bbox]
+        
+        # Calcula posição central e dimensões
+        min_x, max_x = min(x_coords), max(x_coords)
+        min_y, max_y = min(y_coords), max(y_coords)
+        center_x = (min_x + max_x) // 2
+        center_y = (min_y + max_y) // 2
+        bbox_width = max_x - min_x
+        bbox_height = max_y - min_y
+        
+        # Escolhe fonte baseada no tamanho do texto original
+        if bbox_height > 25:
+            font = font_large
+        elif bbox_height > 15:
+            font = font_medium
+        else:
+            font = font_small
+        
+        # Calcula dimensões do texto traduzido
+        if font:
+            text_bbox = draw.textbbox((0, 0), translation, font=font)
+            text_width = text_bbox[2] - text_bbox[0]
+            text_height = text_bbox[3] - text_bbox[1]
+        else:
+            text_width = len(translation) * 8  # Estimativa
+            text_height = 12
+        
+        # Posiciona o texto traduzido
+        text_x = max(0, min(center_x - text_width // 2, original_width - text_width))
+        text_y = max(0, min(center_y - text_height // 2, original_height - text_height))
+        
+        # Desenha fundo semi-transparente para o texto
+        padding = 2
+        bg_x1 = text_x - padding
+        bg_y1 = text_y - padding
+        bg_x2 = text_x + text_width + padding
+        bg_y2 = text_y + text_height + padding
+        
+        draw.rectangle([bg_x1, bg_y1, bg_x2, bg_y2], fill=(0, 0, 0, 180))  # Fundo preto semi-transparente
+        
+        # Desenha o texto traduzido
+        draw.text((text_x, text_y), translation, fill=(255, 255, 255, 255), font=font)  # Texto branco
+        
+        print(f"Posicionado '{translation}' em ({text_x}, {text_y}) - original: '{text}' (confiança: {confidence:.2f})")
+    
+    # Converte para base64
+    buffer = io.BytesIO()
+    img.save(buffer, format='PNG')
+    img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    
+    return img_base64
+
+async def process_ai_request(request: RetroArchRequest) -> dict:
+    """
+    Orquestra o processo de tradução: recebe os bytes da imagem, extrai o texto, 
+    traduz o texto e formata a resposta.
+
+    Args:
+        request: Um objeto RetroArchRequest contendo os dados da requisição.
+
+    Returns:
+        Um dicionário contendo os dados da resposta para o RetroArch.
+    """
+    try:
+        print("Lógica de Serviço: Iniciando processamento da requisição.")
+        
+        # 1. Decodificar a imagem de Base64 para bytes
+        try:
+            image_bytes = base64.b64decode(request.image)
+        except (base64.binascii.Error, TypeError) as e:
+            print(f"Erro de decodificação Base64: {e}")
+            raise HTTPException(status_code=400, detail="Imagem em Base64 inválida.")
+
+        source_lang = request.lang_source
+        target_lang = request.lang_target
+
+        print(f"Lógica de Serviço: Recebidos {len(image_bytes)} bytes de imagem após decodificação.")
+
+        # 2. Extrair textos individuais com posições usando o módulo de OCR
+        print("Lógica de Serviço: Extraindo textos com posições individuais...")
+        detections = await extract_text_with_positions(image_bytes, lang_source=source_lang)
+        
+        if not detections:
+            print("Lógica de Serviço: Nenhum texto foi detectado. Retornando resposta vazia.")
+            return {"image": ""} # Retorna vazio se não houver texto
+
+        # 3. Traduzir cada texto individualmente
+        print(f"Lógica de Serviço: Traduzindo {len(detections)} textos de '{source_lang}' para '{target_lang}'.")
+        detections_with_translations = []
+        
+        for i, detection in enumerate(detections):
+            original_text = detection['text']
+            print(f"Lógica de Serviço: Traduzindo texto {i+1}/{len(detections)}: '{original_text}'")
+            
+            translated_text = await translate_text(
+                text=original_text,
+                source_lang=source_lang,
+                target_lang=target_lang
+            )
+            
+            detections_with_translations.append({
+                'text': original_text,
+                'translation': translated_text,
+                'bbox': detection['bbox'],
+                'confidence': detection['confidence']
+            })
+            
+            print(f"Lógica de Serviço: '{original_text}' -> '{translated_text}'")
+
+        # 4. Criar imagem overlay com traduções posicionadas
+        print(f"Lógica de Serviço: Criando overlay com traduções posicionadas.")
+        
+        # Decodifica a imagem para obter dimensões originais
+        import cv2
+        import numpy as np
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        img_cv = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        original_height, original_width = img_cv.shape[:2]
+        
+        translation_image_b64 = create_positioned_translation_image(
+            detections_with_translations, 
+            original_width, 
+            original_height
+        )
+        
+        # Salva imagens de debug para comparação
+        save_debug_images(image_bytes, translation_image_b64, original_width, original_height)
+        
+        # 5. Formatar a resposta para o RetroArch conforme documentação oficial
+        # O RetroArch espera um campo 'image' com a representação base64 da imagem
+        response_data = {
+            "image": translation_image_b64
+        }
+        
+        print(f"Lógica de Serviço: Processamento concluído. Overlay de tradução criado com {len(translation_image_b64)} caracteres base64.")
+        return response_data
+
+    except Exception as e:
+        print(f"Erro na lógica de serviço: {e}")
+        # Lança uma exceção que será capturada pelo main.py para retornar um erro 500.
+        raise HTTPException(status_code=500, detail=f"Erro interno no processamento: {e}")
