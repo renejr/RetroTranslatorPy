@@ -31,6 +31,168 @@ def get_reader(lang_code: str):
         
     return readers[lang_code]
 
+def group_text_detections(detections, max_distance_ratio=0.15, max_vertical_distance_ratio=0.1):
+    """
+    Agrupa detecções de texto que estão próximas espacialmente e provavelmente pertencem ao mesmo contexto.
+    
+    Args:
+        detections: Lista de dicionários com 'text', 'bbox', 'confidence'
+        max_distance_ratio: Distância horizontal máxima entre detecções como proporção da largura da imagem
+        max_vertical_distance_ratio: Distância vertical máxima entre detecções como proporção da altura da imagem
+        
+    Returns:
+        Lista de dicionários com detecções agrupadas
+    """
+    if not detections:
+        return []
+    
+    # Ordena as detecções por posição vertical (y) para processar de cima para baixo
+    sorted_detections = sorted(detections, key=lambda d: min(point[1] for point in d['bbox']))
+    
+    # Inicializa grupos
+    groups = []
+    current_group = [sorted_detections[0]]
+    
+    # Calcula a altura e largura aproximada da imagem baseada nas bounding boxes
+    all_x_coords = [point[0] for d in detections for point in d['bbox']]
+    all_y_coords = [point[1] for d in detections for point in d['bbox']]
+    img_width = max(all_x_coords) - min(all_x_coords)
+    img_height = max(all_y_coords) - min(all_y_coords)
+    
+    # Calcula as distâncias máximas permitidas
+    max_horizontal_distance = max_distance_ratio * img_width
+    max_vertical_distance = max_vertical_distance_ratio * img_height
+    
+    print(f"Módulo OCR: Agrupando textos (distância horizontal máx: {max_horizontal_distance:.1f}px, vertical máx: {max_vertical_distance:.1f}px)")
+    
+    # Agrupa detecções próximas
+    for i in range(1, len(sorted_detections)):
+        current_detection = sorted_detections[i]
+        last_detection = current_group[-1]
+        
+        # Calcula centros das bounding boxes
+        current_y = sum(point[1] for point in current_detection['bbox']) / 4
+        last_y = sum(point[1] for point in last_detection['bbox']) / 4
+        
+        # Calcula distância vertical entre os centros
+        vertical_distance = abs(current_y - last_y)
+        
+        # Verifica se as detecções estão na mesma linha ou próximas verticalmente
+        if vertical_distance <= max_vertical_distance:
+            # Verifica se as detecções estão próximas horizontalmente ou alinhadas
+            current_x_min = min(point[0] for point in current_detection['bbox'])
+            current_x_max = max(point[0] for point in current_detection['bbox'])
+            last_x_min = min(point[0] for point in last_detection['bbox'])
+            last_x_max = max(point[0] for point in last_detection['bbox'])
+            
+            # Verifica sobreposição horizontal ou proximidade
+            horizontal_overlap = (current_x_min <= last_x_max and current_x_max >= last_x_min)
+            horizontal_distance = min(abs(current_x_min - last_x_max), abs(last_x_min - current_x_max))
+            
+            if horizontal_overlap or horizontal_distance <= max_horizontal_distance:
+                # Adiciona à linha atual se próximo o suficiente
+                current_group.append(current_detection)
+                continue
+        # Verifica se as detecções estão em linhas consecutivas de texto (uma abaixo da outra)
+        # e têm alguma sobreposição horizontal (alinhamento vertical)
+        elif vertical_distance <= max_vertical_distance * 3:  # Permitimos uma distância vertical maior para linhas consecutivas
+            current_x_min = min(point[0] for point in current_detection['bbox'])
+            current_x_max = max(point[0] for point in current_detection['bbox'])
+            last_x_min = min(point[0] for point in last_detection['bbox'])
+            last_x_max = max(point[0] for point in last_detection['bbox'])
+            
+            # Verifica se há sobreposição horizontal significativa (alinhamento vertical)
+            overlap_width = min(current_x_max, last_x_max) - max(current_x_min, last_x_min)
+            min_width = min(current_x_max - current_x_min, last_x_max - last_x_min)
+            
+            if overlap_width > 0 and overlap_width >= min_width * 0.3:  # Pelo menos 30% de sobreposição
+                current_group.append(current_detection)
+                continue
+        
+        # Se chegou aqui, começa um novo grupo
+        groups.append(current_group)
+        current_group = [current_detection]
+    
+    # Adiciona o último grupo
+    if current_group:
+        groups.append(current_group)
+    
+    # Mescla os textos em cada grupo
+    grouped_detections = []
+    for i, group in enumerate(groups):
+        if len(group) == 1:
+            # Se o grupo tem apenas uma detecção, mantém como está
+            grouped_detections.append(group[0])
+        else:
+            # Mescla múltiplas detecções em uma única
+            # Ordena por posição horizontal (x) para manter a ordem correta de leitura
+            sorted_group = sorted(group, key=lambda d: min(point[0] for point in d['bbox']))
+            
+            # Combina os textos com espaços ou quebras de linha, dependendo do contexto
+            # Primeiro, identifica se os textos estão em linhas diferentes
+            y_centers = [sum(point[1] for point in d['bbox']) / 4 for d in sorted_group]
+            
+            # Agrupa por linhas (textos com coordenadas y próximas)
+            line_groups = []
+            current_line = [sorted_group[0]]
+            
+            for i in range(1, len(sorted_group)):
+                current_y = y_centers[i]
+                prev_y = y_centers[i-1]
+                
+                # Se a diferença vertical for pequena, está na mesma linha
+                if abs(current_y - prev_y) <= max_vertical_distance:
+                    current_line.append(sorted_group[i])
+                else:
+                    # Nova linha
+                    line_groups.append(current_line)
+                    current_line = [sorted_group[i]]
+            
+            # Adiciona a última linha
+            if current_line:
+                line_groups.append(current_line)
+            
+            # Para cada linha, combina os textos com espaços
+            line_texts = []
+            for line in line_groups:
+                # Ordena por posição x para manter a ordem correta de leitura
+                sorted_line = sorted(line, key=lambda d: min(point[0] for point in d['bbox']))
+                line_text = ' '.join(d['text'] for d in sorted_line)
+                line_texts.append(line_text)
+            
+            # Combina as linhas com quebras de linha
+            combined_text = '\n'.join(line_texts)
+            
+            # Calcula a confiança média
+            avg_confidence = sum(d['confidence'] for d in sorted_group) / len(sorted_group)
+            
+            # Calcula a bounding box combinada
+            all_points = [point for d in sorted_group for point in d['bbox']]
+            min_x = min(point[0] for point in all_points)
+            min_y = min(point[1] for point in all_points)
+            max_x = max(point[0] for point in all_points)
+            max_y = max(point[1] for point in all_points)
+            
+            combined_bbox = [
+                [min_x, min_y],  # top-left
+                [max_x, min_y],  # top-right
+                [max_x, max_y],  # bottom-right
+                [min_x, max_y]   # bottom-left
+            ]
+            
+            grouped_detections.append({
+                'text': combined_text,
+                'bbox': combined_bbox,
+                'confidence': avg_confidence,
+                'is_grouped': True,
+                'group_size': len(sorted_group)
+            })
+            
+            print(f"Módulo OCR: Grupo {i+1} - Mesclou {len(sorted_group)} detecções: '{combined_text}' (confiança: {avg_confidence:.2f})")
+    
+    print(f"Módulo OCR: Agrupamento concluído - {len(detections)} detecções originais -> {len(grouped_detections)} após agrupamento")
+    return grouped_detections
+
 async def extract_text_with_positions(image_bytes: bytes, lang_source: str) -> list:
     """
     Recebe os bytes de uma imagem, realiza o OCR para um idioma específico e retorna
@@ -129,7 +291,11 @@ async def extract_text_with_positions(image_bytes: bytes, lang_source: str) -> l
                     print(f"Módulo OCR: Detectado '{clean_text}' (confiança: {confidence:.2f})")
         
         print(f"Módulo OCR: Total de detecções válidas: {len(processed_detections)}")
-        return processed_detections
+        
+        # Agrupa detecções próximas para melhorar o contexto
+        grouped_detections = group_text_detections(processed_detections)
+        
+        return grouped_detections
         
     except Exception as e:
         print(f"Erro no módulo OCR (com posições): {e}")
