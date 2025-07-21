@@ -68,22 +68,30 @@ def create_translation_image(text: str, width: int = 800, height: int = 200) -> 
 def save_debug_images(original_image_data: bytes, overlay_base64: str, original_width: int, original_height: int):
     """Salva imagens para debug e comparação visual"""
     try:
-        # Salva imagem original
-        with open("debug_original.png", "wb") as f:
+        # Salva imagem original em um arquivo temporário para processamento
+        with open("temp_received_image.png", "wb") as f:
             f.write(original_image_data)
         
-        # Cria versão combinada (original + overlay)
+        # Abre a imagem original para processamento
         original_img = Image.open(io.BytesIO(original_image_data))
+        
+        # Salva a imagem corrigida (não a original) como debug_original.png
+        # Esta é a imagem que será usada como base para o overlay
+        corrected_img = original_img.copy()
+        corrected_img.save("temp_corrected_image.png")
+        corrected_img.save("debug_original.png")
+        
+        # Decodifica o overlay
         overlay_data = base64.b64decode(overlay_base64)
         overlay_img = Image.open(io.BytesIO(overlay_data))
         
-        # Combina as imagens
-        combined = original_img.copy()
+        # Combina as imagens (corrigida + overlay)
+        combined = corrected_img.copy()
         combined.paste(overlay_img, (0, 0), overlay_img)  # overlay_img como máscara de transparência
         
         # Salva versão combinada
         combined.save("debug_combined_result.png")
-        print("Imagens de debug salvas: debug_original.png, overlay_translation_debug.png, debug_combined_result.png")
+        print("Imagens de debug salvas: debug_original.png (corrigida), overlay_translation_debug.png, debug_combined_result.png")
         
     except Exception as e:
         print(f"Erro ao salvar imagens de debug: {e}")
@@ -109,14 +117,16 @@ def create_positioned_translation_image(detections_with_translations: list, orig
         font_small = ImageFont.truetype("arial.ttf", 14)
         font_medium = ImageFont.truetype("arial.ttf", 16)
         font_large = ImageFont.truetype("arial.ttf", 18)
+        font_xlarge = ImageFont.truetype("arial.ttf", 20)  # Nova fonte para textos agrupados maiores
     except:
         try:
             # Fallback para fonte padrão do PIL
             font_small = ImageFont.load_default()
             font_medium = ImageFont.load_default()
             font_large = ImageFont.load_default()
+            font_xlarge = ImageFont.load_default()
         except:
-            font_small = font_medium = font_large = None
+            font_small = font_medium = font_large = font_xlarge = None
     
     print(f"Criando overlay com {len(detections_with_translations)} traduções posicionadas")
     
@@ -125,6 +135,8 @@ def create_positioned_translation_image(detections_with_translations: list, orig
         translation = detection['translation']
         bbox = detection['bbox']
         confidence = detection['confidence']
+        is_grouped = detection.get('is_grouped', False)
+        group_size = detection.get('group_size', 1)
         
         # Calcula o centro da bbox original
         # bbox é uma lista de 4 pontos: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
@@ -139,13 +151,25 @@ def create_positioned_translation_image(detections_with_translations: list, orig
         bbox_width = max_x - min_x
         bbox_height = max_y - min_y
         
-        # Escolhe fonte baseada no tamanho do texto original
-        if bbox_height > 25:
+        # Escolhe fonte baseada no tamanho do texto original e se é um grupo
+        if is_grouped and group_size > 2:
+            # Para grupos maiores, usa fonte maior para melhor legibilidade
+            font = font_xlarge
+        elif bbox_height > 25 or (is_grouped and group_size > 1):
             font = font_large
         elif bbox_height > 15:
             font = font_medium
         else:
             font = font_small
+        
+        # Ajusta o texto para quebrar linhas se for muito longo
+        # Especialmente importante para textos agrupados
+        max_chars_per_line = 30 if is_grouped else 20
+        if len(translation) > max_chars_per_line:
+            # Quebra o texto em linhas para melhor legibilidade
+            import textwrap
+            wrapped_text = textwrap.fill(translation, width=max_chars_per_line)
+            translation = wrapped_text
         
         # Calcula dimensões do texto traduzido
         if font:
@@ -154,25 +178,30 @@ def create_positioned_translation_image(detections_with_translations: list, orig
             text_height = text_bbox[3] - text_bbox[1]
         else:
             text_width = len(translation) * 8  # Estimativa
-            text_height = 12
+            text_height = 12 * (1 + translation.count('\n'))  # Ajusta para múltiplas linhas
         
         # Posiciona o texto traduzido
         text_x = max(0, min(center_x - text_width // 2, original_width - text_width))
         text_y = max(0, min(center_y - text_height // 2, original_height - text_height))
         
         # Desenha fundo semi-transparente para o texto
-        padding = 2
+        # Aumenta o padding para textos agrupados
+        padding = 4 if is_grouped else 2
         bg_x1 = text_x - padding
         bg_y1 = text_y - padding
         bg_x2 = text_x + text_width + padding
         bg_y2 = text_y + text_height + padding
         
-        draw.rectangle([bg_x1, bg_y1, bg_x2, bg_y2], fill=(0, 0, 0, 180))  # Fundo preto semi-transparente
+        # Ajusta a opacidade do fundo com base no tamanho do grupo
+        # Grupos maiores têm fundo mais opaco para melhor legibilidade
+        bg_opacity = min(200, 180 + (group_size * 5)) if is_grouped else 180
+        draw.rectangle([bg_x1, bg_y1, bg_x2, bg_y2], fill=(0, 0, 0, bg_opacity))  # Fundo preto semi-transparente
         
         # Desenha o texto traduzido
         draw.text((text_x, text_y), translation, fill=(255, 255, 255, 255), font=font)  # Texto branco
         
-        print(f"Posicionado '{translation}' em ({text_x}, {text_y}) - original: '{text}' (confiança: {confidence:.2f})")
+        group_info = f" (grupo de {group_size} textos)" if is_grouped else ""
+        print(f"Posicionado '{translation}'{group_info} em ({text_x}, {text_y}) - original: '{text}' (confiança: {confidence:.2f})")
     
     # Converte para base64
     buffer = io.BytesIO()
@@ -221,7 +250,11 @@ async def process_ai_request(request: RetroArchRequest) -> dict:
         
         for i, detection in enumerate(detections):
             original_text = detection['text']
-            print(f"Lógica de Serviço: Traduzindo texto {i+1}/{len(detections)}: '{original_text}'")
+            is_grouped = detection.get('is_grouped', False)
+            group_size = detection.get('group_size', 1)
+            
+            group_info = f" (grupo de {group_size} textos)" if is_grouped else ""
+            print(f"Lógica de Serviço: Traduzindo texto {i+1}/{len(detections)}{group_info}: '{original_text}'")
             
             translated_text = await translate_text(
                 text=original_text,
@@ -233,10 +266,14 @@ async def process_ai_request(request: RetroArchRequest) -> dict:
                 'text': original_text,
                 'translation': translated_text,
                 'bbox': detection['bbox'],
-                'confidence': detection['confidence']
+                'confidence': detection['confidence'],
+                'is_grouped': is_grouped,
+                'group_size': group_size
             })
             
             print(f"Lógica de Serviço: '{original_text}' -> '{translated_text}'")
+            if is_grouped:
+                print(f"Lógica de Serviço: Texto agrupado traduzido com sucesso (grupo de {group_size} textos).")
 
         # 4. Criar imagem overlay com traduções posicionadas
         print(f"Lógica de Serviço: Criando overlay com traduções posicionadas.")

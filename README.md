@@ -13,7 +13,10 @@ Um servidor Python moderno que implementa um serviço de IA para a funcionalidad
 
 - 🚀 **Servidor Web Rápido:** Construído com FastAPI e Uvicorn
 - 🔥 **OCR com GPU:** EasyOCR otimizado para CUDA/GPU (fallback para CPU)
-- 🌍 **Tradução Multilíngue:** Suporte a múltiplos idiomas via Google Translate
+- 🌍 **Tradução Multilíngue:** Suporte a múltiplos idiomas via sistema de fallback com múltiplos tradutores (Google, Bing, DeepL, etc.)
+- 🎮 **Dicionário de Termos de Jogos:** Traduções otimizadas para termos comuns de jogos arcade/retro
+- 🔍 **Correção de Erros de OCR:** Identificação e correção automática de erros comuns de OCR
+- 🧠 **Priorização de Termos Compostos:** Tradução inteligente de frases completas e termos compostos
 - 🎯 **Overlay Inteligente:** Posicionamento preciso das traduções na tela
 - 📦 **Arquitetura Modular:** Código organizado e fácil de manter
 - 🔧 **Fácil Configuração:** Setup simples para RetroArch
@@ -98,6 +101,114 @@ readers[lang_code] = easyocr.Reader([lang_code], gpu=False)
 
 **OCR (EasyOCR):**
 - Inglês (en)
+
+## 🎮 Sistema de Tradução Aprimorado
+
+O sistema inclui um módulo de tradução especializado para jogos retro/arcade com as seguintes funcionalidades:
+
+### 1. Correção de Erros de OCR
+
+Identifica e corrige automaticamente erros comuns de OCR que podem ocorrer durante a captura de texto de jogos. Por exemplo:
+
+- "STAHT GAME" → "START GAME"
+- "PLAVER ONE" → "PLAYER ONE"
+- "CONTIMUE?" → "CONTINUE?"
+- "GAME OVEH" → "GAME OVER"
+
+### 2. Dicionário de Termos de Jogos
+
+Um dicionário abrangente de termos e frases comuns de jogos arcade/retro, com traduções otimizadas para português:
+
+- Termos básicos de interface: "PRESS START" → "Pressione Iniciar"
+- Status de jogo: "GAME OVER" → "Fim de Jogo"
+- Comandos: "INSERT COIN" → "Insira Moeda"
+- Menus: "OPTIONS MENU" → "Menu de Opções"
+- Mensagens: "CONGRATULATIONS" → "Parabéns"
+
+### 3. Priorização de Termos Compostos
+
+O sistema prioriza a tradução de frases completas e termos compostos antes de traduzir termos individuais, garantindo traduções mais contextuais e naturais:
+
+- "PRESS START BUTTON" → "Pressione o Botão Iniciar" (não "Pressione Iniciar Botão")
+- "GAME OVER SCREEN" → "Tela de Fim de Jogo" (não "Fim de Jogo Tela")
+- "HIGH SCORE TABLE" → "Tabela de Recordes" (não "Recorde Tabela")
+
+### 4. Detecção de Texto em Português
+
+O sistema verifica se o texto já está majoritariamente em português, evitando traduções desnecessárias.
+
+### 5. Sistema de Fallback com Múltiplos Tradutores
+
+O sistema implementa um mecanismo de fallback robusto com múltiplos tradutores:
+
+- **Tradutores em Cascata:** Tenta vários tradutores em sequência (Google, Bing, DeepL, Baidu, Youdao)
+- **Recuperação de Falhas:** Se um tradutor falhar, tenta automaticamente o próximo da lista
+- **Tradução Palavra por Palavra:** Se todos os tradutores falharem para o texto completo, tenta traduzir palavra por palavra
+- **Garantia de Resposta:** Mesmo em caso de falha total, retorna o texto com tradução parcial de termos de jogos
+
+### Expandindo o Sistema
+
+#### Adicionando Novos Termos ao Dicionário
+
+Para adicionar novos termos ao dicionário, edite o dicionário `GAME_TERMS_DICT` em `translation_module.py`:
+
+```python
+# Exemplo de adição de novos termos
+GAME_TERMS_DICT = {
+    'en': {
+        # Adicione seus termos aqui
+        'NEW TERM': 'Novo Termo',
+        'SPECIAL MOVE': 'Movimento Especial',
+        # ...
+    }
+}
+```
+
+#### Configurando o Sistema de Fallback com Múltiplos Tradutores
+
+Para modificar a ordem ou adicionar/remover tradutores do sistema de fallback, edite a lista `translators_to_try` em `translation_module.py`:
+
+```python
+# Lista de tradutores a tentar, em ordem de preferência
+translators_to_try = ['google', 'bing', 'deepl', 'baidu', 'youdao']
+```
+
+### Scripts de Teste
+
+O projeto inclui scripts de teste para verificar o funcionamento do sistema:
+
+- **test_multiple_translators.py**: Testa o sistema de fallback com múltiplos tradutores
+- **test_translator_fallback_simulation.py**: Simula falhas em tradutores específicos para testar o sistema de fallback
+- **test_compound_terms.py**: Testa a priorização de termos compostos na tradução
+- **test_compound_and_ocr.py**: Testa a combinação de correção de OCR e tradução de termos compostos
+- **test_translation_system.py**: Testa o sistema completo de tradução
+```
+
+#### Adicionando Novas Correções de OCR
+
+Para adicionar novas correções de OCR, edite o dicionário `OCR_CORRECTIONS` em `translation_module.py`:
+
+```python
+'ERRRO': 'ERRO',
+```
+
+#### Scripts de Teste
+
+O sistema inclui vários scripts de teste para verificar o funcionamento correto de todas as funcionalidades:
+
+```bash
+# Testar o dicionário de termos de jogos
+python test_game_terms.py
+
+# Testar a priorização de termos compostos
+python test_compound_terms.py
+
+# Testar a integração entre correção de OCR e tradução
+python test_compound_and_ocr.py
+
+# Testar todo o sistema de tradução
+python test_translation_system.py
+```
 - Japonês (ja)
 - Chinês (zh)
 - Coreano (ko)
