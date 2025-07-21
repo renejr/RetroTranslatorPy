@@ -2,6 +2,7 @@
 
 import base64
 import io
+import time
 from fastapi import HTTPException
 from PIL import Image, ImageDraw, ImageFont
 import textwrap
@@ -10,6 +11,7 @@ import textwrap
 from models import RetroArchRequest
 from ocr_module import extract_text_from_image, extract_text_with_positions
 from translation_module import translate_text
+from database import db_manager, calculate_image_hash, initialize_database
 
 def create_translation_image(text: str, width: int = 800, height: int = 200) -> str:
     """
@@ -222,7 +224,18 @@ async def process_ai_request(request: RetroArchRequest) -> dict:
         Um dicionário contendo os dados da resposta para o RetroArch.
     """
     try:
+        # Inicializa o temporizador para medir o tempo de processamento
+        start_time = time.time()
+        
+        # Garante que o banco de dados está inicializado
+        if not db_manager.connected:
+            initialize_database()
+        
         print("Lógica de Serviço: Iniciando processamento da requisição.")
+        
+        # Flags para rastrear hits de cache
+        ocr_cache_hit = False
+        translation_cache_hits = 0
         
         # 1. Decodificar a imagem de Base64 para bytes
         try:
@@ -235,13 +248,34 @@ async def process_ai_request(request: RetroArchRequest) -> dict:
         target_lang = request.lang_target
 
         print(f"Lógica de Serviço: Recebidos {len(image_bytes)} bytes de imagem após decodificação.")
-
-        # 2. Extrair textos individuais com posições usando o módulo de OCR
-        print("Lógica de Serviço: Extraindo textos com posições individuais...")
-        detections = await extract_text_with_positions(image_bytes, lang_source=source_lang)
+        
+        # Calcula o hash da imagem para verificar no cache
+        image_hash = calculate_image_hash(image_bytes)
+        print(f"Lógica de Serviço: Hash da imagem calculado: {image_hash[:10]}...")
+        
+        # 2. Verificar se já temos resultados de OCR para esta imagem no cache
+        cached_ocr_result = db_manager.get_ocr_result(image_hash, source_lang)
+        
+        if cached_ocr_result:
+            print(f"Lógica de Serviço: Resultados de OCR encontrados no cache!")
+            detections = cached_ocr_result['text_results']
+            ocr_cache_hit = True
+        else:
+            # Extrair textos individuais com posições usando o módulo de OCR
+            print("Lógica de Serviço: Extraindo textos com posições individuais...")
+            detections = await extract_text_with_positions(image_bytes, lang_source=source_lang)
+            
+            # Salva os resultados de OCR no cache
+            if detections:
+                # Calcula a confiança média dos resultados de OCR
+                avg_confidence = sum(d['confidence'] for d in detections) / len(detections) if detections else 0
+                db_manager.save_ocr_result(image_hash, source_lang, detections, avg_confidence)
         
         if not detections:
             print("Lógica de Serviço: Nenhum texto foi detectado. Retornando resposta vazia.")
+            # Registra a requisição nas estatísticas
+            processing_time = time.time() - start_time
+            db_manager.record_request_processing(ocr_hit=ocr_cache_hit, processing_time=processing_time)
             return {"image": ""} # Retorna vazio se não houver texto
 
         # 3. Traduzir cada texto individualmente
@@ -256,19 +290,41 @@ async def process_ai_request(request: RetroArchRequest) -> dict:
             group_info = f" (grupo de {group_size} textos)" if is_grouped else ""
             print(f"Lógica de Serviço: Traduzindo texto {i+1}/{len(detections)}{group_info}: '{original_text}'")
             
-            translated_text = await translate_text(
-                text=original_text,
-                source_lang=source_lang,
-                target_lang=target_lang
-            )
+            # Verifica se já temos esta tradução no cache
+            cached_translation = db_manager.get_translation(original_text, source_lang, target_lang)
             
+            if cached_translation:
+                print(f"Lógica de Serviço: Tradução encontrada no cache!")
+                translated_text = cached_translation['translated_text']
+                translation_cache_hits += 1
+            else:
+                # Traduz o texto usando o módulo de tradução
+                translated_text = await translate_text(
+                    text=original_text,
+                    source_lang=source_lang,
+                    target_lang=target_lang
+                )
+                
+                # Salva a tradução no cache
+                # Estima a confiança como a confiança do OCR
+                confidence = detection.get('confidence', 0.8)
+                db_manager.save_translation(
+                    original_text, 
+                    source_lang, 
+                    target_lang, 
+                    translated_text, 
+                    translator_used="multiple", 
+                    confidence=confidence
+                )
+            
+            # Garante que todos os valores sejam tipos Python padrão para evitar problemas de serialização JSON
             detections_with_translations.append({
                 'text': original_text,
                 'translation': translated_text,
-                'bbox': detection['bbox'],
-                'confidence': detection['confidence'],
-                'is_grouped': is_grouped,
-                'group_size': group_size
+                'bbox': [[int(point[0]), int(point[1])] for point in detection['bbox']],
+                'confidence': float(detection['confidence']),
+                'is_grouped': bool(is_grouped),
+                'group_size': int(group_size)
             })
             
             print(f"Lógica de Serviço: '{original_text}' -> '{translated_text}'")
@@ -293,6 +349,20 @@ async def process_ai_request(request: RetroArchRequest) -> dict:
         
         # Salva imagens de debug para comparação
         save_debug_images(image_bytes, translation_image_b64, original_width, original_height)
+        
+        # Calcula o tempo total de processamento
+        processing_time = time.time() - start_time
+        
+        # Registra a requisição nas estatísticas
+        db_manager.record_request_processing(
+            ocr_hit=ocr_cache_hit, 
+            translation_hit=(translation_cache_hits > 0), 
+            processing_time=processing_time
+        )
+        
+        # Log de desempenho
+        cache_info = f"Cache: OCR {'✓' if ocr_cache_hit else '✗'}, Traduções: {translation_cache_hits}/{len(detections)}"
+        print(f"Lógica de Serviço: Processamento concluído em {processing_time:.2f}s. {cache_info}")
         
         # 5. Formatar a resposta para o RetroArch conforme documentação oficial
         # O RetroArch espera um campo 'image' com a representação base64 da imagem

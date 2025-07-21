@@ -173,11 +173,12 @@ def group_text_detections(detections, max_distance_ratio=0.15, max_vertical_dist
             max_x = max(point[0] for point in all_points)
             max_y = max(point[1] for point in all_points)
             
+            # Converte coordenadas para int padrão para evitar problemas de serialização com int32
             combined_bbox = [
-                [min_x, min_y],  # top-left
-                [max_x, min_y],  # top-right
-                [max_x, max_y],  # bottom-right
-                [min_x, max_y]   # bottom-left
+                [int(min_x), int(min_y)],  # top-left
+                [int(max_x), int(min_y)],  # top-right
+                [int(max_x), int(max_y)],  # bottom-right
+                [int(min_x), int(max_y)]   # bottom-left
             ]
             
             grouped_detections.append({
@@ -283,10 +284,14 @@ async def extract_text_with_positions(image_bytes: bytes, lang_source: str) -> l
             if confidence > 0.3 and text.strip():  # Filtro de confiança
                 clean_text = text.strip().replace('\n', ' ').replace('\t', ' ')
                 if len(clean_text) > 0:
+                        # Converte coordenadas para int padrão para evitar problemas de serialização com int32
+                    converted_bbox = [
+                        [int(point[0]), int(point[1])] for point in bbox
+                    ]
                     processed_detections.append({
                         'text': clean_text,
-                        'bbox': bbox,
-                        'confidence': confidence
+                        'bbox': converted_bbox,
+                        'confidence': float(confidence)  # Garante que confidence seja float padrão
                     })
                     print(f"Módulo OCR: Detectado '{clean_text}' (confiança: {confidence:.2f})")
         

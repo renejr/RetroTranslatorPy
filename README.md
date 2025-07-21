@@ -7,7 +7,7 @@
 [![EasyOCR](https://img.shields.io/badge/EasyOCR-GPU%20Enabled-orange.svg)](https://github.com/JaidedAI/EasyOCR)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Um servidor Python moderno que implementa um serviço de IA para a funcionalidade "AI Service" do RetroArch, permitindo **tradução em tempo real** de jogos com **aceleração GPU** para OCR ultra-rápido.
+Um servidor Python moderno que implementa um serviço de IA para a funcionalidade "AI Service" do RetroArch, permitindo **tradução em tempo real** de jogos com **aceleração GPU** para OCR ultra-rápido e **cache de banco de dados** para performance otimizada.
 
 ## ✨ Funcionalidades
 
@@ -21,6 +21,8 @@ Um servidor Python moderno que implementa um serviço de IA para a funcionalidad
 - 📦 **Arquitetura Modular:** Código organizado e fácil de manter
 - 🔧 **Fácil Configuração:** Setup simples para RetroArch
 - 📊 **Debug Visual:** Imagens de debug para troubleshooting
+- 💾 **Cache de Banco de Dados:** Armazenamento eficiente de traduções e resultados de OCR em MariaDB
+- 🔄 **Serialização JSON Robusta:** Conversão automática de tipos NumPy para tipos Python padrão
 
 ## 📁 Estrutura do Projeto
 
@@ -30,8 +32,13 @@ retroarch_ai_service/
 ├── service_logic.py        # 🧠 Lógica de processamento e overlay
 ├── ocr_module.py          # 👁️ Módulo OCR com EasyOCR + GPU
 ├── translation_module.py  # 🌍 Módulo de tradução
+├── database.py           # 💾 Módulo de banco de dados MariaDB
 ├── models.py              # 📋 Modelos de dados Pydantic
 ├── requirements.txt       # 📦 Dependências Python
+├── setup_database.sql     # 🛠️ Script SQL para criar banco de dados
+├── setup_database.bat     # 🪟 Script de configuração para Windows
+├── setup_database.sh      # 🐧 Script de configuração para Linux
+├── README_DATABASE.md     # 📚 Documentação do banco de dados
 ├── .gitignore            # 🚫 Arquivos ignorados pelo Git
 ├── test_*.py             # 🧪 Scripts de teste
 └── README.md             # 📖 Este arquivo
@@ -48,6 +55,7 @@ Siga os passos abaixo para configurar e executar o serviço.
 - **GPU NVIDIA** (opcional, mas recomendado para melhor performance)
 - **CUDA Toolkit** (se usando GPU)
 - **4GB+ RAM** (para modelos OCR)
+- **MariaDB 10.5+** (para cache de traduções e OCR)
 
 ### 2. 🚀 Instalação Rápida
 
@@ -58,6 +66,13 @@ cd RetroTranslatorPy
 
 # Instale as dependências
 pip install -r requirements.txt
+
+# Configure o banco de dados (opcional, mas recomendado)
+# Windows:
+setup_database.bat
+
+# Linux:
+./setup_database.sh
 
 # Inicie o servidor
 python main.py
@@ -101,6 +116,18 @@ readers[lang_code] = easyocr.Reader([lang_code], gpu=False)
 
 **OCR (EasyOCR):**
 - Inglês (en)
+- Japonês (ja)
+- Chinês (zh)
+- Coreano (ko)
+- E muitos outros...
+
+**Tradução (Google Translate):**
+- Português (pt)
+- Espanhol (es)
+- Francês (fr)
+- Alemão (de)
+- Italiano (it)
+- E 100+ idiomas
 
 ## 🎮 Sistema de Tradução Aprimorado
 
@@ -146,6 +173,32 @@ O sistema implementa um mecanismo de fallback robusto com múltiplos tradutores:
 - **Tradução Palavra por Palavra:** Se todos os tradutores falharem para o texto completo, tenta traduzir palavra por palavra
 - **Garantia de Resposta:** Mesmo em caso de falha total, retorna o texto com tradução parcial de termos de jogos
 
+## 🔄 Cache de Banco de Dados
+
+O RetroTranslatorPy agora inclui um sistema de cache de banco de dados MariaDB que:
+
+- Armazena resultados de OCR para evitar reprocessamento de imagens idênticas
+- Salva traduções para reutilização imediata
+- Mantém estatísticas de uso para análise de performance
+
+Para configurar o banco de dados, consulte o arquivo [README_DATABASE.md](README_DATABASE.md).
+
+## 🔄 Serialização JSON Robusta
+
+O sistema agora inclui tratamento robusto para serialização JSON, convertendo automaticamente tipos NumPy (como `np.int32`, `np.float32`) para tipos Python padrão (`int`, `float`) antes da serialização. Isso resolve problemas de compatibilidade com o RetroArch e outros clientes.
+
+Exemplo de conversão automática:
+
+```python
+# Antes (pode causar erro de serialização)
+bbox = np.array([[10, 20], [30, 40]])
+confidence = np.float32(0.95)
+
+# Depois (serialização garantida)
+bbox = [[int(x), int(y)] for x, y in bbox]
+confidence = float(confidence)
+```
+
 ### Expandindo o Sistema
 
 #### Adicionando Novos Termos ao Dicionário
@@ -173,17 +226,6 @@ Para modificar a ordem ou adicionar/remover tradutores do sistema de fallback, e
 translators_to_try = ['google', 'bing', 'deepl', 'baidu', 'youdao']
 ```
 
-### Scripts de Teste
-
-O projeto inclui scripts de teste para verificar o funcionamento do sistema:
-
-- **test_multiple_translators.py**: Testa o sistema de fallback com múltiplos tradutores
-- **test_translator_fallback_simulation.py**: Simula falhas em tradutores específicos para testar o sistema de fallback
-- **test_compound_terms.py**: Testa a priorização de termos compostos na tradução
-- **test_compound_and_ocr.py**: Testa a combinação de correção de OCR e tradução de termos compostos
-- **test_translation_system.py**: Testa o sistema completo de tradução
-```
-
 #### Adicionando Novas Correções de OCR
 
 Para adicionar novas correções de OCR, edite o dicionário `OCR_CORRECTIONS` em `translation_module.py`:
@@ -192,7 +234,7 @@ Para adicionar novas correções de OCR, edite o dicionário `OCR_CORRECTIONS` e
 'ERRRO': 'ERRO',
 ```
 
-#### Scripts de Teste
+### Scripts de Teste
 
 O sistema inclui vários scripts de teste para verificar o funcionamento correto de todas as funcionalidades:
 
@@ -208,19 +250,13 @@ python test_compound_and_ocr.py
 
 # Testar todo o sistema de tradução
 python test_translation_system.py
-```
-- Japonês (ja)
-- Chinês (zh)
-- Coreano (ko)
-- E muitos outros...
 
-**Tradução (Google Translate):**
-- Português (pt)
-- Espanhol (es)
-- Francês (fr)
-- Alemão (de)
-- Italiano (it)
-- E 100+ idiomas
+# Testar a serialização JSON
+python test_json_serialization.py
+
+# Testar a comunicação com o servidor
+python test_server.py
+```
 
 ## 🐛 Troubleshooting
 
@@ -235,12 +271,25 @@ python test_translation_system.py
 1. Verifique se a GPU está sendo usada (veja logs do servidor)
 2. Instale drivers CUDA atualizados
 3. Reduza a resolução do jogo no RetroArch
+4. Verifique se o cache de banco de dados está funcionando
 
 ### Problema: "Erro de conexão"
 **Soluções:**
 1. Verifique se o servidor está rodando
 2. Desative firewall/antivírus temporariamente
 3. Teste com `curl http://localhost:4404`
+
+### Problema: "Erro de serialização JSON"
+**Soluções:**
+1. Verifique se a versão mais recente do código está sendo usada
+2. Execute o teste de serialização: `python test_json_serialization.py`
+3. Verifique se há tipos NumPy não convertidos em seu código personalizado
+
+### Problema: "Erro de conexão com o banco de dados"
+**Soluções:**
+1. Verifique se o MariaDB está instalado e em execução
+2. Execute o script de configuração do banco de dados
+3. Verifique as credenciais no arquivo `database.py`
 
 ## 🧪 Testes
 
@@ -252,6 +301,15 @@ python test_gpu_usage.py
 
 # Teste de comunicação
 python test_retroarch_request.py
+
+# Teste de serialização JSON
+python test_json_serialization.py
+
+# Teste do servidor
+python test_server.py
+
+# Teste de conexão com o banco de dados
+python test_database.py
 ```
 
 ## 🤝 Contribuição
@@ -274,6 +332,7 @@ Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE](LICE
 - [EasyOCR](https://github.com/JaidedAI/EasyOCR) - OCR poderoso e fácil
 - [FastAPI](https://fastapi.tiangolo.com/) - Framework web moderno
 - [Google Translate](https://translate.google.com/) - Serviço de tradução
+- [MariaDB](https://mariadb.org/) - Banco de dados rápido e confiável
 
 ---
 
@@ -322,7 +381,9 @@ O serviço expõe um endpoint principal:
 
 ## 🔮 Roadmap
 
-- [ ] **Cache de Traduções** - Evitar retraduzir textos idênticos
+- [x] **Cache de Traduções** - Evitar retraduzir textos idênticos
+- [x] **Cache de OCR** - Evitar reprocessar imagens idênticas
+- [x] **Serialização JSON Robusta** - Conversão automática de tipos NumPy
 - [ ] **Suporte a DeepL** - API de tradução mais precisa
 - [ ] **Interface Web** - Dashboard para monitoramento
 - [ ] **Docker Support** - Containerização para deploy fácil
@@ -338,5 +399,7 @@ O serviço expõe um endpoint principal:
 - ✅ **Múltiplos Idiomas** - Suporte amplo
 - ✅ **Testes Automatizados** - Scripts de validação
 - ✅ **Documentação** - README completo
+- ✅ **Cache de Banco de Dados** - Implementado com MariaDB
+- ✅ **Serialização JSON Robusta** - Conversão automática de tipos NumPy
 - 🔄 **Performance** - Otimização contínua
 - 🔄 **Estabilidade** - Melhorias constantes
