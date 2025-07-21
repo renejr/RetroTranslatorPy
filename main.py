@@ -8,12 +8,30 @@ from contextlib import asynccontextmanager
 # Importa a lógica de serviço e o modelo de dados
 from service_logic import process_ai_request
 from models import RetroArchRequest
+from database import db_manager, initialize_database
+
+# Define o gerenciador de contexto para inicializar e fechar recursos
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Inicializa o banco de dados quando o servidor inicia
+    print("Inicializando o banco de dados MariaDB...")
+    if initialize_database():
+        print("Banco de dados inicializado com sucesso!")
+    else:
+        print("Aviso: Falha ao inicializar o banco de dados. O serviço continuará sem cache.")
+    
+    yield
+    
+    # Fecha a conexão com o banco de dados quando o servidor é encerrado
+    print("Fechando conexão com o banco de dados...")
+    db_manager.disconnect()
 
 # Cria a aplicação FastAPI
 app = FastAPI(
     title="RetroTranslatorPy",
     description="Um serviço de tradução com IA para o RetroArch usando Python e FastAPI.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 @app.post("/")
