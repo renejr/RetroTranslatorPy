@@ -185,3 +185,14 @@ response_*.png
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# KivyMD specific
+*.kv.orig
+*.kv.bak
+.kivy/
+
+# Interface admin specific
+retroarch_admin/__pycache__/
+retroarch_admin/*.pyc
+retroarch_admin/.kivy/
+retroarch_admin/debug.log
