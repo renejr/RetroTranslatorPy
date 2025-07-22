@@ -69,30 +69,30 @@ def test_translations_table():
     # Insere uma tradução
     print(f"Inserindo tradução: '{original_text}' -> '{translated_text}'")
     db_manager.save_translation(
-        original_text=original_text,
+        source_text=original_text,
         translated_text=translated_text,
         source_lang="en",
         target_lang="pt",
-        translator="test",
+        translator_used="test",
         confidence=0.95
     )
     
     # Recupera a tradução
     result = db_manager.get_translation(original_text, "en", "pt")
     
-    if result and result[1] == translated_text:
-        print(f"✅ Tradução recuperada com sucesso: '{result[1]}'")
-        print(f"   Confiança: {result[2]}, Contador de uso: {result[3]}")
+    if result and result['translated_text'] == translated_text:
+        print(f"✅ Tradução recuperada com sucesso: '{result['translated_text']}'")
+        print(f"   Confiança: {result['confidence']}, Contador de uso: {result['used_count']}")
     else:
         print("❌ Falha ao recuperar tradução!")
         return False
     
     # Testa a atualização do contador de uso
-    db_manager.update_translation_usage(original_text, "en", "pt")
+    # A função get_translation já atualiza o contador de uso
     result = db_manager.get_translation(original_text, "en", "pt")
     
-    if result and result[3] == 2:  # Contador deve ser 2 agora
-        print(f"✅ Contador de uso atualizado com sucesso: {result[3]}")
+    if result and result['used_count'] == 2:  # Contador deve ser 2 agora
+        print(f"✅ Contador de uso atualizado com sucesso: {result['used_count']}")
     else:
         print("❌ Falha ao atualizar contador de uso!")
         return False
@@ -106,7 +106,7 @@ def test_ocr_results_table():
     
     # Gera uma imagem de teste e calcula seu hash
     image_base64 = generate_test_image()
-    image_hash = calculate_image_hash(image_base64)
+    image_hash = calculate_image_hash(image_base64.encode('utf-8'))
     
     # Cria resultados de OCR fictícios
     ocr_results = [
@@ -126,19 +126,19 @@ def test_ocr_results_table():
     # Recupera os resultados de OCR
     result = db_manager.get_ocr_result(image_hash, "en")
     
-    if result and len(result[1]) == 2:  # Deve ter 2 resultados
-        print(f"✅ Resultados de OCR recuperados com sucesso: {len(result[1])} itens")
-        print(f"   Confiança: {result[2]}, Contador de uso: {result[3]}")
+    if result and len(result['text_results']) == 2:  # Deve ter 2 resultados
+        print(f"✅ Resultados de OCR recuperados com sucesso: {len(result['text_results'])} itens")
+        print(f"   Confiança: {result['confidence']}, Contador de uso: {result['used_count']}")
     else:
         print("❌ Falha ao recuperar resultados de OCR!")
         return False
     
     # Testa a atualização do contador de uso
-    db_manager.update_ocr_result_usage(image_hash, "en")
+    # A função get_ocr_result já atualiza o contador de uso
     result = db_manager.get_ocr_result(image_hash, "en")
     
-    if result and result[3] == 2:  # Contador deve ser 2 agora
-        print(f"✅ Contador de uso atualizado com sucesso: {result[3]}")
+    if result and result['used_count'] == 2:  # Contador deve ser 2 agora
+        print(f"✅ Contador de uso atualizado com sucesso: {result['used_count']}")
     else:
         print("❌ Falha ao atualizar contador de uso!")
         return False
@@ -152,10 +152,9 @@ def test_statistics_table():
     
     # Atualiza as estatísticas
     print("Atualizando estatísticas...")
-    db_manager.update_statistics(
-        total_requests=1,
-        ocr_cache_hit=True,
-        translation_cache_hit=False,
+    db_manager.record_request_processing(
+        ocr_hit=True,
+        translation_hit=False,
         processing_time=0.5
     )
     

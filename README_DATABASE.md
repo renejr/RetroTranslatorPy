@@ -80,6 +80,9 @@ Armazena resultados de OCR para imagens:
 - `source_lang`: Idioma de origem
 - `text_results`: Resultados de texto em formato JSON
 - `confidence`: Nível de confiança do OCR
+- `original_image`: Imagem original em formato BLOB (binário)
+- `image_base64`: Imagem original em formato Base64 (texto)
+- `image_metadata`: Metadados da imagem em formato JSON (dimensões, idiomas, formato, etc.)
 - `created_at`: Data de criação do registro
 - `usage_count`: Contador de uso do resultado
 
@@ -108,6 +111,16 @@ Se o serviço não conseguir se conectar ao banco de dados, verifique:
 ### Desativar o Cache de Banco de Dados
 
 Se você encontrar problemas com o banco de dados e quiser desativar temporariamente o cache, você pode modificar a função `initialize_database()` no arquivo `database.py` para retornar `False`.
+
+### Testar a Conexão com o Banco de Dados
+
+Para testar a conexão com o banco de dados e verificar se todas as tabelas estão sendo criadas corretamente, execute o teste de banco de dados:
+
+```bash
+python -m tests.test_database
+```
+
+Este teste verifica a conexão, a criação de tabelas e as operações básicas de CRUD no banco de dados.
 
 ---
 

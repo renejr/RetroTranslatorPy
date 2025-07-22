@@ -40,7 +40,12 @@ retroarch_ai_service/
 ├── setup_database.sh      # 🐧 Script de configuração para Linux
 ├── README_DATABASE.md     # 📚 Documentação do banco de dados
 ├── .gitignore            # 🚫 Arquivos ignorados pelo Git
-├── test_*.py             # 🧪 Scripts de teste
+├── tests/                # 🧪 Diretório de testes
+│   ├── __init__.py       # Inicializador do pacote de testes
+│   ├── test_database.py  # Teste de banco de dados
+│   ├── test_gpu_usage.py # Teste de uso de GPU
+│   ├── test_server.py    # Teste do servidor
+│   └── ... (outros testes)
 └── README.md             # 📖 Este arquivo
 ```
 
@@ -240,22 +245,22 @@ O sistema inclui vários scripts de teste para verificar o funcionamento correto
 
 ```bash
 # Testar o dicionário de termos de jogos
-python test_game_terms.py
+python -m tests.test_game_terms
 
 # Testar a priorização de termos compostos
-python test_compound_terms.py
+python -m tests.test_compound_terms
 
 # Testar a integração entre correção de OCR e tradução
-python test_compound_and_ocr.py
+python -m tests.test_compound_and_ocr
 
 # Testar todo o sistema de tradução
-python test_translation_system.py
+python -m tests.test_translation_system
 
 # Testar a serialização JSON
-python test_json_serialization.py
+python -m tests.test_json_serialization
 
 # Testar a comunicação com o servidor
-python test_server.py
+python -m tests.test_server
 ```
 
 ## 🐛 Troubleshooting
@@ -264,7 +269,7 @@ python test_server.py
 **Soluções:**
 1. Verifique se a URL está correta: `http://localhost:4404`
 2. Confirme que o Output Mode está em "Image Mode"
-3. Teste a comunicação executando: `python test_retroarch_request.py`
+3. Teste a comunicação executando: `python -m tests.test_retroarch_request`
 
 ### Problema: "Tradução muito lenta"
 **Soluções:**
@@ -282,7 +287,7 @@ python test_server.py
 ### Problema: "Erro de serialização JSON"
 **Soluções:**
 1. Verifique se a versão mais recente do código está sendo usada
-2. Execute o teste de serialização: `python test_json_serialization.py`
+2. Execute o teste de serialização: `python -m tests.test_json_serialization`
 3. Verifique se há tipos NumPy não convertidos em seu código personalizado
 
 ### Problema: "Erro de conexão com o banco de dados"
@@ -297,19 +302,19 @@ O projeto inclui scripts de teste:
 
 ```bash
 # Teste de GPU
-python test_gpu_usage.py
+python -m tests.test_gpu_usage
 
 # Teste de comunicação
-python test_retroarch_request.py
+python -m tests.test_retroarch_request
 
 # Teste de serialização JSON
-python test_json_serialization.py
+python -m tests.test_json_serialization
 
 # Teste do servidor
-python test_server.py
+python -m tests.test_server
 
 # Teste de conexão com o banco de dados
-python test_database.py
+python -m tests.test_database
 ```
 
 ## 🤝 Contribuição

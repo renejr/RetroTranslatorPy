@@ -4,6 +4,7 @@ import mysql.connector
 import json
 import hashlib
 import time
+import base64
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
 
@@ -91,6 +92,9 @@ class DatabaseManager:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 used_count INT DEFAULT 1,
+                original_image LONGBLOB,
+                image_base64 LONGTEXT,
+                image_metadata JSON,
                 INDEX (image_hash, source_lang)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
             """)
@@ -176,7 +180,20 @@ class DatabaseManager:
             return False
     
     def get_ocr_result(self, image_hash: str, source_lang: str) -> Optional[Dict[str, Any]]:
-        """Busca um resultado de OCR existente no banco de dados."""
+        """Busca um resultado de OCR existente no banco de dados, incluindo a imagem original e metadados.
+        
+        Args:
+            image_hash (str): Hash SHA-256 da imagem
+            source_lang (str): Idioma de origem do texto na imagem
+            
+        Returns:
+            dict: Resultado de OCR contendo:
+                - text_results: Resultados do OCR em formato JSON
+                - confidence: Confiança média dos resultados de OCR
+                - image_base64: Imagem original em formato Base64 (se disponível)
+                - image_metadata: Metadados da imagem em formato JSON (se disponível)
+                - Ou None se não encontrado
+        """
         if not self.ensure_connected():
             return None
         
@@ -204,6 +221,10 @@ class DatabaseManager:
                 # Converte o JSON armazenado de volta para um objeto Python
                 result['text_results'] = json.loads(result['text_results'])
                 
+                # Converte os metadados JSON para objeto Python, se existirem
+                if result['image_metadata']:
+                    result['image_metadata'] = json.loads(result['image_metadata'])
+                
                 print(f"Resultado de OCR encontrado no cache para imagem: {image_hash[:10]}...")
                 return result
             return None
@@ -212,8 +233,20 @@ class DatabaseManager:
             return None
     
     def save_ocr_result(self, image_hash: str, source_lang: str, text_results: List[Dict[str, Any]], 
-                       confidence: float = None) -> bool:
-        """Salva um novo resultado de OCR no banco de dados."""
+                       confidence: float = None, original_image: bytes = None, image_metadata: Dict[str, Any] = None) -> bool:
+        """Salva um novo resultado de OCR no banco de dados, incluindo a imagem original e metadados.
+        
+        Args:
+            image_hash (str): Hash SHA-256 da imagem
+            source_lang (str): Idioma de origem do texto na imagem
+            text_results (list): Lista de resultados de OCR (dicionários com texto, posição, etc)
+            confidence (float): Confiança média dos resultados de OCR
+            original_image (bytes, optional): Imagem original em formato binário
+            image_metadata (dict, optional): Metadados da imagem (dimensões, idiomas, formato, etc)
+            
+        Returns:
+            bool: True se salvo com sucesso, False caso contrário
+        """
         if not self.ensure_connected():
             return False
         
@@ -244,12 +277,23 @@ class DatabaseManager:
             # Converte a lista de resultados sanitizados para JSON
             text_results_json = json.dumps(sanitized_results)
             
+            # Converte a imagem original para base64 se fornecida
+            image_base64 = None
+            if original_image:
+                image_base64 = base64.b64encode(original_image).decode('utf-8')
+            
+            # Converte os metadados para JSON se fornecidos
+            metadata_json = None
+            if image_metadata:
+                metadata_json = json.dumps(image_metadata)
+            
             query = """
             INSERT INTO ocr_results 
-            (image_hash, source_lang, text_results, confidence) 
-            VALUES (%s, %s, %s, %s)
+            (image_hash, source_lang, text_results, confidence, original_image, image_base64, image_metadata) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
-            self.cursor.execute(query, (image_hash, source_lang, text_results_json, confidence))
+            self.cursor.execute(query, (image_hash, source_lang, text_results_json, confidence, 
+                                      original_image, image_base64, metadata_json))
             self.connection.commit()
             print(f"Novo resultado de OCR salvo no banco de dados para imagem: {image_hash[:10]}...")
             return True

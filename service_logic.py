@@ -3,6 +3,9 @@
 import base64
 import io
 import time
+import cv2
+import numpy as np
+from datetime import datetime
 from fastapi import HTTPException
 from PIL import Image, ImageDraw, ImageFont
 import textwrap
@@ -249,6 +252,14 @@ async def process_ai_request(request: RetroArchRequest) -> dict:
 
         print(f"Lógica de Serviço: Recebidos {len(image_bytes)} bytes de imagem após decodificação.")
         
+        # Decodifica a imagem para obter dimensões originais
+        import cv2
+        import numpy as np
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        img_cv = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        original_height, original_width = img_cv.shape[:2]
+        print(f"Lógica de Serviço: Dimensões da imagem original: {original_width}x{original_height}")
+        
         # Calcula o hash da imagem para verificar no cache
         image_hash = calculate_image_hash(image_bytes)
         print(f"Lógica de Serviço: Hash da imagem calculado: {image_hash[:10]}...")
@@ -265,11 +276,34 @@ async def process_ai_request(request: RetroArchRequest) -> dict:
             print("Lógica de Serviço: Extraindo textos com posições individuais...")
             detections = await extract_text_with_positions(image_bytes, lang_source=source_lang)
             
-            # Salva os resultados de OCR no cache
+            # Salva os resultados de OCR no cache, incluindo a imagem original e metadados
             if detections:
                 # Calcula a confiança média dos resultados de OCR
                 avg_confidence = sum(d['confidence'] for d in detections) / len(detections) if detections else 0
-                db_manager.save_ocr_result(image_hash, source_lang, detections, avg_confidence)
+                
+                # Prepara os metadados da imagem
+                image_metadata = {
+                    'width': original_width,
+                    'height': original_height,
+                    'source_lang': source_lang,
+                    'target_lang': target_lang,
+                    'format': request.format,
+                    'timestamp': datetime.now().isoformat(),
+                    'coords': request.coords,
+                    'viewport': request.viewport,
+                    'label': request.label,
+                    'state': request.state
+                }
+                
+                # Salva os resultados de OCR, a imagem original e os metadados
+                db_manager.save_ocr_result(
+                    image_hash, 
+                    source_lang, 
+                    detections, 
+                    avg_confidence, 
+                    original_image=image_bytes, 
+                    image_metadata=image_metadata
+                )
         
         if not detections:
             print("Lógica de Serviço: Nenhum texto foi detectado. Retornando resposta vazia.")
@@ -333,13 +367,6 @@ async def process_ai_request(request: RetroArchRequest) -> dict:
 
         # 4. Criar imagem overlay com traduções posicionadas
         print(f"Lógica de Serviço: Criando overlay com traduções posicionadas.")
-        
-        # Decodifica a imagem para obter dimensões originais
-        import cv2
-        import numpy as np
-        np_arr = np.frombuffer(image_bytes, np.uint8)
-        img_cv = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        original_height, original_width = img_cv.shape[:2]
         
         translation_image_b64 = create_positioned_translation_image(
             detections_with_translations, 
