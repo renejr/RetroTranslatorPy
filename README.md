@@ -40,6 +40,28 @@ retroarch_ai_service/
 ├── setup_database.sh      # 🐧 Script de configuração para Linux
 ├── README_DATABASE.md     # 📚 Documentação do banco de dados
 ├── .gitignore            # 🚫 Arquivos ignorados pelo Git
+├── retroarch_admin/       # 🖥️ Interface administrativa KivyMD
+│   ├── main.py           # 🚀 Aplicação principal da interface
+│   ├── app.py            # 📱 Configuração do app KivyMD
+│   ├── database_manager.py # 🗄️ Gerenciador de banco de dados
+│   ├── controllers/      # 🎮 Controladores MVC
+│   │   ├── translations_controller.py
+│   │   ├── ocr_results_controller.py
+│   │   └── statistics_controller.py
+│   ├── models/           # 📊 Modelos de dados
+│   │   ├── translation.py
+│   │   ├── ocr_result.py
+│   │   └── statistic.py
+│   ├── views/            # 👁️ Interfaces visuais
+│   │   ├── translations_view.py  # 📝 Visualização de traduções (com paginação corrigida)
+│   │   ├── ocr_results_view.py   # 🔍 Visualização de resultados OCR
+│   │   └── statistics_view.py    # 📈 Visualização de estatísticas
+│   ├── kv/               # 🎨 Arquivos de layout KivyMD
+│   │   ├── main.kv
+│   │   ├── translations.kv
+│   │   ├── ocr_results.kv
+│   │   └── statistics.kv
+│   └── requirements_admin.txt # 📦 Dependências da interface
 ├── tests/                # 🧪 Diretório de testes
 │   ├── __init__.py       # Inicializador do pacote de testes
 │   ├── test_database.py  # Teste de banco de dados
@@ -102,6 +124,48 @@ python main.py
 2. **Pressione a tecla do AI Service** (padrão: `T`)
 3. **Aguarde o processamento** (1-3 segundos)
 4. **Veja a tradução** sobreposta na tela
+
+### 5. 🖥️ Interface Administrativa
+
+O projeto inclui uma **interface administrativa moderna** construída com KivyMD para gerenciar e visualizar dados:
+
+#### 🚀 Executando a Interface
+
+```bash
+# Navegue para a pasta da interface
+cd retroarch_admin
+
+# Instale as dependências específicas
+pip install -r requirements_admin.txt
+
+# Execute a interface
+python main.py
+```
+
+#### ✨ Funcionalidades da Interface
+
+- **📝 Gerenciamento de Traduções:**
+  - Visualização paginada de todas as traduções
+  - Filtros por idioma de origem e destino
+  - Seletor de itens por página (5, 10, 15, 20, 25, 50)
+  - Busca e ordenação de resultados
+
+- **🔍 Resultados de OCR:**
+  - Análise de textos extraídos
+  - Visualização de coordenadas e confiança
+  - Histórico completo de processamentos
+
+- **📊 Estatísticas:**
+  - Métricas de uso do serviço
+  - Gráficos de performance
+  - Análise de idiomas mais utilizados
+
+#### 🎨 Interface Moderna
+
+- **Material Design:** Interface seguindo padrões do Google Material Design
+- **Responsiva:** Adaptável a diferentes tamanhos de tela
+- **Tema Escuro:** Interface moderna e confortável para os olhos
+- **Navegação Intuitiva:** Menu lateral com acesso rápido às funcionalidades
 
 ## 🔧 Configuração Avançada
 
