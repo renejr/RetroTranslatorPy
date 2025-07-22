@@ -159,16 +159,17 @@ class TranslationsView(MDBoxLayout):
             use_pagination=False,  # Desabilitar paginação nativa
             rows_num=max(self.items_per_page, 100),  # Garantir que rows_num seja suficiente
             column_data=[
+                ("Row", dp(15), lambda *args: self.sort_column("Row")),
                 ("ID", dp(18), lambda *args: self.sort_column("ID")),
-                ("Original", dp(65), lambda *args: self.sort_column("Original")),
-                ("Tradução", dp(65), lambda *args: self.sort_column("Tradução")),
-                ("Origem", dp(28), lambda *args: self.sort_column("Origem")),
-                ("Destino", dp(28), lambda *args: self.sort_column("Destino")),
-                ("Tradutor", dp(35), lambda *args: self.sort_column("Tradutor")),
-                ("Confiança", dp(32), lambda *args: self.sort_column("Confiança")),
-                ("Criação", dp(40), lambda *args: self.sort_column("Criação")),
-                ("Últ. Uso", dp(40), lambda *args: self.sort_column("Últ. Uso")),
-                ("Usos", dp(22), lambda *args: self.sort_column("Usos"))
+                ("Original", dp(60), lambda *args: self.sort_column("Original")),
+                ("Tradução", dp(60), lambda *args: self.sort_column("Tradução")),
+                ("Origem", dp(25), lambda *args: self.sort_column("Origem")),
+                ("Destino", dp(25), lambda *args: self.sort_column("Destino")),
+                ("Tradutor", dp(30), lambda *args: self.sort_column("Tradutor")),
+                ("Confiança", dp(28), lambda *args: self.sort_column("Confiança")),
+                ("Criação", dp(35), lambda *args: self.sort_column("Criação")),
+                ("Últ. Uso", dp(35), lambda *args: self.sort_column("Últ. Uso")),
+                ("Usos", dp(20), lambda *args: self.sort_column("Usos"))
             ]
         )
         
@@ -434,9 +435,15 @@ class TranslationsView(MDBoxLayout):
             self.next_button.md_bg_color = (0.2, 0.6, 1, 1)  # Azul
             self.next_button.text_color = (1, 1, 1, 1)  # Texto branco
         
+        # Criar mapeamento direto: posição visual -> dados reais (similar ao HTML com IDs)
+        self.row_mapping = {}  # Mapeamento: índice_visual -> dados_completos_da_linha
+        
         # Formatar dados para a tabela
         table_data = []
-        for row in data:
+        for index, row in enumerate(data):
+            # Armazenar mapeamento direto da posição visual para os dados reais
+            self.row_mapping[index] = row  # Índice visual -> dados completos
+            
             # Limitar tamanho dos textos para exibição na tabela e remover quebras de linha
             source_text = row.get('source_text', '')
             source_text = source_text.replace('\n', ' ').replace('\r', ' ')  # Remover quebras de linha
@@ -458,6 +465,7 @@ class TranslationsView(MDBoxLayout):
             
             # Verificar se todas as chaves existem e fornecer valores padrão se não existirem
             table_data.append([
+                str(index + 1),  # Row Index (posição visual)
                 str(row.get('id', 'N/A')),  # ID
                 source_text,  # Texto Original
                 translated_text,  # Texto Traduzido
@@ -472,6 +480,8 @@ class TranslationsView(MDBoxLayout):
         
         # Atualizar dados da tabela
         self.data_table.row_data = table_data
+        
+        print(f"[DEBUG] Mapeamento criado com {len(self.row_mapping)} linhas")
     
     # Método on_pagination removido - não é mais necessário pois desabilitamos use_pagination
     
@@ -494,17 +504,19 @@ class TranslationsView(MDBoxLayout):
         # Obter dados atuais da tabela
         current_data = self.data_table.row_data
         
-        # Mapear nome da coluna para índice
+        # Mapear nome da coluna para índice (ajustado para nova coluna Row)
         column_mapping = {
-            "Original": 0,
-            "Tradução": 1,
-            "Origem": 2,
-            "Destino": 3,
-            "Tradutor": 4,
-            "Confiança": 5,
-            "Criação": 6,
-            "Últ. Uso": 7,
-            "Usos": 8
+            "Row": 0,
+            "ID": 1,
+            "Original": 2,
+            "Tradução": 3,
+            "Origem": 4,
+            "Destino": 5,
+            "Tradutor": 6,
+            "Confiança": 7,
+            "Criação": 8,
+            "Últ. Uso": 9,
+            "Usos": 10
         }
         
         column_index = column_mapping.get(column_name, 0)
@@ -551,62 +563,99 @@ class TranslationsView(MDBoxLayout):
             self.page_label.text = fallback_text
     
     def on_row_press(self, instance_table, instance_row):
+        """Método chamado quando uma linha da tabela é pressionada - CORRIGIDO para calcular índice real da linha"""
+        print(f"[DEBUG] on_row_press chamado - instance_row.index bruto: {instance_row.index}")
+        
+        # CORREÇÃO: Calcular o índice real da linha baseado no número de colunas
+        # A tabela tem 11 colunas (10 originais + 1 nova coluna adicionada), então dividimos o índice por 11
+        number_of_columns = 11
+        real_row_index = instance_row.index // number_of_columns
+        print(f"[DEBUG] Índice real da linha calculado: {real_row_index} (de {instance_row.index} // {number_of_columns})")
+        
         # Verificar se há dados na tabela
-        if not instance_table.row_data or instance_row.index >= len(instance_table.row_data):
+        if not instance_table.row_data or real_row_index >= len(instance_table.row_data):
+            print(f"[ERROR] Sem dados na tabela ou índice inválido. Dados: {len(instance_table.row_data) if instance_table.row_data else 0}, Índice real: {real_row_index}")
             return
             
         try:
-            # Obter ID da tradução selecionada
-            row_id = int(instance_table.row_data[instance_row.index][0])
+            # Obter dados da linha usando o índice real calculado
+            row_data = instance_table.row_data[real_row_index]
+            print(f"[DEBUG] Dados da linha {real_row_index}: {row_data}")
             
-            # Obter dados completos da tradução
-            translation = self.app.db_manager.get_translation_by_id(row_id)
-            if not translation:
-                return
-        except (IndexError, ValueError):
-            print("Erro ao obter dados da linha selecionada")
-            return
+            # O ID da tradução está na segunda coluna (índice 1)
+            translation_id = int(row_data[1])
+            print(f"[DEBUG] ID da tradução extraído: {translation_id}")
+            
+            # Buscar no mapeamento usando o índice real da linha
+            if real_row_index in self.row_mapping:
+                translation_data = self.row_mapping[real_row_index]
+                print(f"[DEBUG] Tradução encontrada no mapeamento:")
+                print(f"[DEBUG] ID: {translation_data.get('id')}")
+                print(f"[DEBUG] Texto original: {translation_data.get('source_text', '')[:50]}...")
+                
+                # Exibir detalhes da tradução
+                self.show_translation_details(translation_data)
+            else:
+                print(f"[ERROR] Índice {instance_row.index} não encontrado no mapeamento")
+                print(f"[DEBUG] Índices disponíveis no mapeamento: {list(self.row_mapping.keys())}")
+                
+        except (IndexError, ValueError) as e:
+            print(f"[ERROR] Erro ao obter dados da linha selecionada: {e}")
+        except Exception as e:
+            print(f"[ERROR] Erro no on_row_press: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def show_translation_details(self, translation):
+        """Exibe diálogo com detalhes da tradução"""
+        print(f"[DEBUG] show_translation_details chamado para ID: {translation.get('id')}")
         
-        # Formatar datas
-        created_at = translation.get('created_at')
-        created_at = created_at.strftime('%d/%m/%Y %H:%M') if created_at else 'N/A'
-        
-        last_used = translation.get('last_used')
-        last_used = last_used.strftime('%d/%m/%Y %H:%M') if last_used else 'N/A'
-        
-        # Formatar confiança
-        confidence = f"{translation.get('confidence', 0):.2f}" if translation.get('confidence') is not None else 'N/A'
-        
-        # Criar conteúdo do diálogo
-        content = f"""**ID:** {translation.get('id', 'N/A')}\n\n
-                    **Texto Original:**\n{translation.get('source_text', 'N/A')}\n\n
-                    **Texto Traduzido:**\n{translation.get('translated_text', 'N/A')}\n\n
-                    **Idioma Origem:** {translation.get('source_lang', 'N/A')}\n
-                    **Idioma Destino:** {translation.get('target_lang', 'N/A')}\n
-                    **Tradutor:** {translation.get('translator', 'N/A')}\n
-                    **Confiança:** {confidence}\n
-                    **Criado em:** {created_at}\n
-                    **Último Uso:** {last_used}\n
-                    **Contagem de Uso:** {translation.get('usage_count', 0)}\n
-                    **Hash do Texto:** {translation.get('text_hash', 'N/A')}"""
-        
-        # Mostrar diálogo com detalhes da tradução
-        if self.dialog:
-            self.dialog.dismiss()
-        
-        self.dialog = MDDialog(
-            title="Detalhes da Tradução",
-            text=content,
-            size_hint=(0.8, 0.8),
-            buttons=[
-                MDFlatButton(
-                    text="FECHAR",
-                    on_release=lambda x: self.dialog.dismiss()
-                )
-            ]
-        )
-        
-        self.dialog.open()
+        try:
+            # Formatar datas
+            created_at = translation.get('created_at')
+            created_at = created_at.strftime('%d/%m/%Y %H:%M') if created_at else 'N/A'
+            
+            last_used = translation.get('last_used')
+            last_used = last_used.strftime('%d/%m/%Y %H:%M') if last_used else 'N/A'
+            
+            # Formatar confiança
+            confidence = f"{translation.get('confidence', 0):.2f}" if translation.get('confidence') is not None else 'N/A'
+            
+            print(f"[DEBUG] Dados formatados - ID: {translation.get('id')}, Confiança: {confidence}")
+            
+            # Criar conteúdo do diálogo
+            content = f"""**ID:** {translation.get('id', 'N/A')}\n\n**Texto Original:**\n{translation.get('source_text', 'N/A')}\n\n**Texto Traduzido:**\n{translation.get('translated_text', 'N/A')}\n\n**Idioma Origem:** {translation.get('source_lang', 'N/A')}\n**Idioma Destino:** {translation.get('target_lang', 'N/A')}\n**Tradutor:** {translation.get('translator_used', 'N/A')}\n**Confiança:** {confidence}\n**Criado em:** {created_at}\n**Último Uso:** {last_used}\n**Contagem de Uso:** {translation.get('used_count', 0)}\n**Hash do Texto:** {translation.get('text_hash', 'N/A')}"""
+            
+            print(f"[DEBUG] Conteúdo do modal criado, tamanho: {len(content)} caracteres")
+            
+            # Fechar diálogo anterior se existir
+            if hasattr(self, 'dialog') and self.dialog:
+                print(f"[DEBUG] Fechando diálogo anterior")
+                self.dialog.dismiss()
+            
+            print(f"[DEBUG] Criando novo MDDialog...")
+            
+            # Criar novo diálogo
+            self.dialog = MDDialog(
+                title="Detalhes da Tradução",
+                text=content,
+                size_hint=(0.8, 0.8),
+                buttons=[
+                    MDFlatButton(
+                        text="FECHAR",
+                        on_release=lambda x: self.dialog.dismiss()
+                    )
+                ]
+            )
+            
+            print(f"[DEBUG] MDDialog criado, abrindo...")
+            self.dialog.open()
+            print(f"[DEBUG] Modal aberto com sucesso!")
+            
+        except Exception as e:
+            print(f"[ERROR] Erro em show_translation_details: {e}")
+            import traceback
+            traceback.print_exc()
     
     def get_all_data_for_export(self):
         """Obtém todos os dados para exportação (sem paginação)"""
