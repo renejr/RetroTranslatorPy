@@ -96,3 +96,22 @@ O erro "Graph.remove_plot() missing 1 required positional argument: 'plot'" ocor
 **Solução:**
 
 O código foi atualizado para corrigir esse problema, verificando se existem plots antes de tentar removê-los e passando o plot correto como argumento.
+
+### Problema de Seleção de Linha na Tabela de Traduções
+
+O sistema apresentava um problema onde clicar em diferentes células da mesma linha retornava dados de linhas diferentes, especialmente na última célula de cada linha.
+
+**Causa:**
+
+O `instance_row.index` no MDDataTable retorna o índice sequencial da célula clicada, não o índice da linha. Com 11 colunas por linha, o cálculo do índice real da linha estava incorreto.
+
+**Solução:**
+
+Implementado cálculo correto do índice real da linha:
+```python
+# Calcular o índice real da linha baseado no número de colunas
+number_of_columns = 11  # 10 colunas originais + 1 nova coluna adicionada
+real_row_index = instance_row.index // number_of_columns
+```
+
+Agora qualquer clique em qualquer célula de uma linha retorna os dados corretos da linha correspondente.

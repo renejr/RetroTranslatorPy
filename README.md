@@ -470,5 +470,23 @@ O serviço expõe um endpoint principal:
 - ✅ **Documentação** - README completo
 - ✅ **Cache de Banco de Dados** - Implementado com MariaDB
 - ✅ **Serialização JSON Robusta** - Conversão automática de tipos NumPy
+- ✅ **Interface Administrativa** - Dashboard KivyMD com correções de seleção de linha
 - 🔄 **Performance** - Otimização contínua
 - 🔄 **Estabilidade** - Melhorias constantes
+
+## 🖥️ Interface Administrativa
+
+O projeto inclui uma interface administrativa moderna construída com KivyMD que permite:
+
+- 📊 **Visualização de Traduções** - Tabela interativa com detalhes completos
+- 🔍 **Resultados de OCR** - Análise de textos extraídos e confiança
+- 📈 **Estatísticas do Sistema** - Gráficos de performance e uso
+- 🔧 **Gerenciamento de Dados** - Operações CRUD no banco de dados
+
+### Correções Recentes
+
+- ✅ **Seleção de Linha Corrigida** - Problema onde clicar em diferentes células da mesma linha retornava dados incorretos foi resolvido
+- ✅ **Cálculo de Índice Otimizado** - Implementado cálculo correto para tabelas com 11 colunas
+- ✅ **Modal de Detalhes Funcional** - Exibição consistente de informações independente da célula clicada
+
+Para mais detalhes, consulte o [README da Interface Administrativa](retroarch_admin/README.md).
