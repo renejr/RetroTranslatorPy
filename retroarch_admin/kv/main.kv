@@ -1,0 +1,37 @@
+# kv/main.kv
+#:import MDScreen kivymd.uix.screen.MDScreen
+#:import MDBoxLayout kivymd.uix.boxlayout.MDBoxLayout
+#:import MDTopAppBar kivymd.uix.toolbar.MDTopAppBar
+#:import MDTabs kivymd.uix.tab.MDTabs
+#:import MDFloatLayout kivymd.uix.floatlayout.MDFloatLayout
+#:import MDRaisedButton kivymd.uix.button.MDRaisedButton
+
+<MainScreen>:
+    name: 'main'
+    MDBoxLayout:
+        orientation: 'vertical'
+        
+        MDTopAppBar:
+            title: 'RetroArch Admin'
+            left_action_items: [['menu', lambda x: app.open_menu(x)]]
+            right_action_items: [['refresh', lambda x: root.refresh_current_tab()]]
+            elevation: 10
+        
+        MDTabs:
+            id: tabs
+            on_tab_switch: root.on_tab_switch(args[1].text)
+            
+            Tab:
+                id: tab_translations
+                title: 'Traduções'
+                text: 'Traduções'
+            
+            Tab:
+                id: tab_ocr_results
+                title: 'Resultados OCR'
+                text: 'Resultados OCR'
+            
+            Tab:
+                id: tab_statistics
+                title: 'Estatísticas'
+                text: 'Estatísticas'

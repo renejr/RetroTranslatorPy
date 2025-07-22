@@ -1,0 +1,8 @@
+kivy
+kivymd
+mysql-connector-python==8.0.32
+Pillow
+matplotlib
+kivy-garden.graph==0.4.0
+pyperclip==1.8.2
+reportlab==4.0.4
