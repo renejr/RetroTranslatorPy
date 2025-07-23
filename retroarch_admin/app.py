@@ -73,6 +73,11 @@ class RetroArchAdminApp(MDApp):
                 "viewclass": "OneLineListItem",
                 "on_release": lambda x=2: self.show_about(),
             },
+            {
+                "text": "Sair",
+                "viewclass": "OneLineListItem",
+                "on_release": lambda x=3: self.exit_app(),
+            },
         ]
         
         self.menu = MDDropdownMenu(
@@ -108,6 +113,15 @@ class RetroArchAdminApp(MDApp):
             ],
         )
         self.about_dialog.open()
+    
+    def exit_app(self):
+        """Função para fechar a aplicação"""
+        # Fechar o menu se estiver aberto
+        if hasattr(self, 'menu'):
+            self.menu.dismiss()
+        
+        # Fechar a aplicação
+        self.stop()
     
     def on_tab_switch(self, instance_tabs, instance_tab, instance_tab_label, tab_text):
         # Função chamada quando o usuário muda de aba

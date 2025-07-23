@@ -5,9 +5,13 @@ from kivymd.uix.button import MDFlatButton, MDRaisedButton, MDIconButton
 from kivymd.uix.datatables import MDDataTable
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.textfield import MDTextField
-from kivymd.uix.label import MDLabel
+from kivymd.uix.label import MDLabel, MDIcon
 from kivymd.uix.card import MDCard
 from kivymd.uix.menu import MDDropdownMenu
+from kivymd.uix.scrollview import MDScrollView
+from kivymd.uix.gridlayout import MDGridLayout
+from kivy.uix.widget import Widget
+from kivy.graphics import Color, Rectangle
 from kivy.metrics import dp
 from kivy.clock import Clock
 import datetime
@@ -607,10 +611,10 @@ class TranslationsView(MDBoxLayout):
             traceback.print_exc()
     
     def show_translation_details(self, translation):
-        """Exibe diálogo com detalhes da tradução"""
-        print(f"[DEBUG] show_translation_details chamado para ID: {translation.get('id')}")
-        
+        """Exibe os detalhes da tradução em um modal simples e funcional"""
         try:
+            print(f"[DEBUG] Exibindo detalhes da tradução: {translation.get('id')}")
+            
             # Formatar datas
             created_at = translation.get('created_at')
             created_at = created_at.strftime('%d/%m/%Y %H:%M') if created_at else 'N/A'
@@ -620,40 +624,139 @@ class TranslationsView(MDBoxLayout):
             
             # Formatar confiança
             confidence = f"{translation.get('confidence', 0):.2f}" if translation.get('confidence') is not None else 'N/A'
+            confidence_percent = f"{float(confidence) * 100:.1f}%" if confidence != 'N/A' else 'N/A'
             
             print(f"[DEBUG] Dados formatados - ID: {translation.get('id')}, Confiança: {confidence}")
-            
-            # Criar conteúdo do diálogo
-            content = f"""**ID:** {translation.get('id', 'N/A')}\n\n**Texto Original:**\n{translation.get('source_text', 'N/A')}\n\n**Texto Traduzido:**\n{translation.get('translated_text', 'N/A')}\n\n**Idioma Origem:** {translation.get('source_lang', 'N/A')}\n**Idioma Destino:** {translation.get('target_lang', 'N/A')}\n**Tradutor:** {translation.get('translator_used', 'N/A')}\n**Confiança:** {confidence}\n**Criado em:** {created_at}\n**Último Uso:** {last_used}\n**Contagem de Uso:** {translation.get('used_count', 0)}\n**Hash do Texto:** {translation.get('text_hash', 'N/A')}"""
-            
-            print(f"[DEBUG] Conteúdo do modal criado, tamanho: {len(content)} caracteres")
             
             # Fechar diálogo anterior se existir
             if hasattr(self, 'dialog') and self.dialog:
                 print(f"[DEBUG] Fechando diálogo anterior")
                 self.dialog.dismiss()
             
-            print(f"[DEBUG] Criando novo MDDialog...")
+            print(f"[DEBUG] Criando modal simples...")
             
-            # Criar novo diálogo
+            # Layout principal minimalista
+            content_layout = MDBoxLayout(
+                orientation='vertical',
+                spacing=dp(8),
+                size_hint_y=None,
+                height=dp(350),
+                padding=[dp(16), dp(16), dp(16), dp(16)]
+            )
+            
+            # Título
+            title_label = MDLabel(
+                text=f"Detalhes da Tradução #{translation.get('id', 'N/A')}",
+                theme_text_color='Primary',
+                font_style='H6',
+                size_hint_y=None,
+                height=dp(30)
+            )
+            content_layout.add_widget(title_label)
+            
+            # Idiomas
+            lang_label = MDLabel(
+                text=f"Idiomas: {translation.get('source_lang', 'N/A')} → {translation.get('target_lang', 'N/A')}",
+                theme_text_color='Primary',
+                font_style='Subtitle1',
+                size_hint_y=None,
+                height=dp(25)
+            )
+            content_layout.add_widget(lang_label)
+            
+            # Texto original
+            original_label = MDLabel(
+                text=f"Original: {translation.get('source_text', 'N/A')[:100]}{'...' if len(translation.get('source_text', '')) > 100 else ''}",
+                theme_text_color='Primary',
+                font_style='Body1',
+                size_hint_y=None,
+                height=dp(40),
+                text_size=(None, None)
+            )
+            content_layout.add_widget(original_label)
+            
+            # Texto traduzido
+            translated_label = MDLabel(
+                text=f"Tradução: {translation.get('translated_text', 'N/A')[:100]}{'...' if len(translation.get('translated_text', '')) > 100 else ''}",
+                theme_text_color='Primary',
+                font_style='Body1',
+                size_hint_y=None,
+                height=dp(40),
+                text_size=(None, None)
+            )
+            content_layout.add_widget(translated_label)
+            
+            # Tradutor
+            translator_label = MDLabel(
+                text=f"Tradutor: {translation.get('translator_used', 'N/A')}",
+                theme_text_color='Primary',
+                font_style='Body2',
+                size_hint_y=None,
+                height=dp(25)
+            )
+            content_layout.add_widget(translator_label)
+            
+            # Confiança
+            confidence_label = MDLabel(
+                text=f"Confiança: {confidence_percent}",
+                theme_text_color='Primary',
+                font_style='Body2',
+                size_hint_y=None,
+                height=dp(25)
+            )
+            content_layout.add_widget(confidence_label)
+            
+            # Data de criação
+            created_label = MDLabel(
+                text=f"Criado em: {created_at}",
+                theme_text_color='Primary',
+                font_style='Body2',
+                size_hint_y=None,
+                height=dp(25)
+            )
+            content_layout.add_widget(created_label)
+            
+            # Último uso
+            used_label = MDLabel(
+                text=f"Último uso: {last_used}",
+                theme_text_color='Primary',
+                font_style='Body2',
+                size_hint_y=None,
+                height=dp(25)
+            )
+            content_layout.add_widget(used_label)
+            
+            # Contador de usos
+            count_label = MDLabel(
+                text=f"Usos: {translation.get('used_count', 0)}",
+                theme_text_color='Primary',
+                font_style='Body2',
+                size_hint_y=None,
+                height=dp(25)
+            )
+            content_layout.add_widget(count_label)
+            
+            # Criar diálogo simples
             self.dialog = MDDialog(
                 title="Detalhes da Tradução",
-                text=content,
-                size_hint=(0.8, 0.8),
+                type="custom",
+                content_cls=content_layout,
+                size_hint=(0.8, 0.7),
                 buttons=[
-                    MDFlatButton(
+                    MDRaisedButton(
                         text="FECHAR",
+                        md_bg_color=(0.12, 0.46, 0.70, 1),
                         on_release=lambda x: self.dialog.dismiss()
                     )
                 ]
             )
             
-            print(f"[DEBUG] MDDialog criado, abrindo...")
+            print(f"[DEBUG] Modal simples criado, abrindo...")
             self.dialog.open()
-            print(f"[DEBUG] Modal aberto com sucesso!")
+            print(f"[DEBUG] Modal simples aberto com sucesso!")
             
         except Exception as e:
-            print(f"[ERROR] Erro em show_translation_details: {e}")
+            print(f"[ERROR] Erro ao exibir detalhes da tradução: {e}")
             import traceback
             traceback.print_exc()
     
