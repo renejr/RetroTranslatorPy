@@ -154,11 +154,18 @@ python main.py
   - Análise de textos extraídos
   - Visualização de coordenadas e confiança
   - Histórico completo de processamentos
+  - Exportação de dados em CSV, JSON e PDF
 
 - **📊 Estatísticas:**
   - Métricas de uso do serviço
   - Gráficos de performance
   - Análise de idiomas mais utilizados
+
+- **📤 Exportação de Dados:**
+  - Suporte a múltiplos formatos (CSV, JSON, PDF)
+  - Filtros aplicados na exportação
+  - Timestamps únicos para evitar sobrescrita
+  - Formatação inteligente de dados JSON
 
 #### 🎨 Interface Moderna
 
@@ -488,5 +495,8 @@ O projeto inclui uma interface administrativa moderna construída com KivyMD que
 - ✅ **Seleção de Linha Corrigida** - Problema onde clicar em diferentes células da mesma linha retornava dados incorretos foi resolvido
 - ✅ **Cálculo de Índice Otimizado** - Implementado cálculo correto para tabelas com 11 colunas
 - ✅ **Modal de Detalhes Funcional** - Exibição consistente de informações independente da célula clicada
+- ✅ **Funcionalidades de Exportação** - Implementado suporte completo a exportação em CSV, JSON e PDF
+- ✅ **Correção de Nomes de Colunas** - Corrigidos erros de referência de colunas nos métodos de exportação
+- ✅ **Tratamento de Dados JSON** - Implementada extração inteligente de texto de campos JSON
 
 Para mais detalhes, consulte o [README da Interface Administrativa](retroarch_admin/README.md).
