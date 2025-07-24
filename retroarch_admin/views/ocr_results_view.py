@@ -6,6 +6,8 @@ from kivymd.uix.datatables import MDDataTable
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.textfield import MDTextField
 from kivymd.uix.menu import MDDropdownMenu
+from kivymd.uix.card import MDCard
+from kivymd.uix.label import MDLabel
 from kivy.metrics import dp
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
@@ -14,6 +16,13 @@ import io
 import base64
 import json
 import datetime
+import csv
+import os
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.lib.units import inch
 
 class OCRResultsView(MDBoxLayout):
     def __init__(self, **kwargs):
@@ -90,12 +99,50 @@ class OCRResultsView(MDBoxLayout):
         # Adicionar layout de filtros à view
         self.add_widget(self.filter_layout)
         
+        # Área de botões de exportação
+        self.export_layout = MDBoxLayout(
+            orientation='horizontal',
+            size_hint_y=None,
+            height=dp(50),
+            spacing=dp(10),
+            padding=[0, dp(5), 0, dp(5)]
+        )
+        
+        # Botões de exportação
+        self.export_csv_button = MDRaisedButton(
+            text="Exportar CSV",
+            size_hint_x=0.2,
+            on_release=self.export_to_csv
+        )
+        
+        self.export_json_button = MDRaisedButton(
+            text="Exportar JSON",
+            size_hint_x=0.2,
+            on_release=self.export_to_json
+        )
+        
+        self.export_pdf_button = MDRaisedButton(
+            text="Exportar PDF",
+            size_hint_x=0.2,
+            on_release=self.export_to_pdf
+        )
+        
+        # Adicionar botões ao layout de exportação
+        self.export_layout.add_widget(self.export_csv_button)
+        self.export_layout.add_widget(self.export_json_button)
+        self.export_layout.add_widget(self.export_pdf_button)
+        
+        # Adicionar espaço vazio para alinhar à direita
+        self.export_layout.add_widget(MDLabel(size_hint_x=0.4))
+        
+        # Adicionar layout de exportação à view
+        self.add_widget(self.export_layout)
+        
         # Criar tabela de dados
         self.data_table = MDDataTable(
             size_hint=(1, 0.85),
-            use_pagination=True,
-            pagination_menu_pos="auto",
-            rows_num=self.items_per_page,
+            use_pagination=False,
+            rows_num=max(self.items_per_page, 100),  # Garantir que rows_num seja suficiente
             column_data=[
                 ("ID", dp(30)),
                 ("Texto Detectado", dp(200)),
@@ -115,39 +162,86 @@ class OCRResultsView(MDBoxLayout):
         self.add_widget(self.data_table)
         
         # Layout de navegação de páginas
+        # --- INÍCIO DA REESTRUTURAÇÃO PARA PADRÃO UNIFICADO ---
+        # Layout de paginação e seleção de itens por página
+        self.pagination_card = MDCard(
+            orientation='vertical',
+            padding=[dp(8), dp(8), dp(8), dp(8)],
+            size_hint=(1, None),
+            height=dp(70),
+            elevation=2,
+            radius=[12, 12, 12, 12],
+            md_bg_color=(0.97, 0.97, 0.97, 1)
+        )
         self.pagination_layout = MDBoxLayout(
             orientation='horizontal',
-            size_hint_y=None,
-            height=dp(50),
             spacing=dp(10),
-            padding=[0, dp(10), 0, 0]
+            adaptive_height=True,
+            padding=[dp(0), dp(0), dp(0), dp(0)]
         )
-        
-        # Botões de navegação
-        self.prev_button = MDFlatButton(
-            text="Anterior",
+        self.prev_button = MDRaisedButton(
+            text="◀ Anterior",
+            theme_icon_color="Custom",
+            md_bg_color=(0.2, 0.6, 1, 1),
+            text_color=(1, 1, 1, 1),
             on_release=lambda x: self.change_page(-1)
         )
-        
-        self.page_label = MDTextField(
-            text="Página 1 de 1",
-            readonly=True,
-            size_hint_x=0.2,
-            halign="center"
+        self.page_info_layout = MDBoxLayout(
+            orientation='vertical',
+            adaptive_width=True,
+            spacing=dp(2)
         )
-        
-        self.next_button = MDFlatButton(
-            text="Próxima",
+        self.page_label = MDLabel(
+            text="Página 1 de 1",
+            theme_text_color="Primary",
+            font_style="H6",
+            halign="center",
+            adaptive_width=True
+        )
+        self.records_label = MDLabel(
+            text="0 registros encontrados",
+            theme_text_color="Secondary",
+            font_style="Caption",
+            halign="center",
+            adaptive_width=True
+        )
+        self.next_button = MDRaisedButton(
+            text="Próxima ▶",
+            theme_icon_color="Custom",
+            md_bg_color=(0.2, 0.6, 1, 1),
+            text_color=(1, 1, 1, 1),
             on_release=lambda x: self.change_page(1)
         )
-        
-        # Adicionar botões ao layout de navegação
+        self.page_info_layout.add_widget(self.page_label)
+        self.page_info_layout.add_widget(self.records_label)
+        self.items_per_page_layout = MDBoxLayout(
+            orientation='horizontal',
+            adaptive_width=True,
+            spacing=dp(5)
+        )
+        self.items_per_page_label = MDLabel(
+            text="Itens por página:",
+            theme_text_color="Primary",
+            font_style="Body2",
+            adaptive_width=True
+        )
+        # Botão para selecionar itens por página
+        self.items_per_page_button = MDRaisedButton(
+            text=f"{self.items_per_page} por página",
+            on_release=self.show_items_per_page_menu,
+            md_bg_color=(0.2, 0.6, 1, 1),
+            text_color=(1, 1, 1, 1),
+            pos_hint={"center_y": 0.5}
+        )
+        self.items_per_page_layout.add_widget(self.items_per_page_label)
+        self.items_per_page_layout.add_widget(self.items_per_page_button)
+        self.pagination_layout.add_widget(self.items_per_page_layout)
         self.pagination_layout.add_widget(self.prev_button)
-        self.pagination_layout.add_widget(self.page_label)
+        self.pagination_layout.add_widget(self.page_info_layout)
         self.pagination_layout.add_widget(self.next_button)
-        
-        # Adicionar layout de navegação à view
-        self.add_widget(self.pagination_layout)
+        self.pagination_card.add_widget(self.pagination_layout)
+        self.add_widget(self.pagination_card)
+        # --- FIM DA REESTRUTURAÇÃO DE PAGINAÇÃO ---
     
     def show_lang_menu(self, button):
         # Criar menu de idiomas
@@ -185,15 +279,12 @@ class OCRResultsView(MDBoxLayout):
         # Obter dados do banco de dados
         search_text = self.search_field.text
         offset = (self.page - 1) * self.items_per_page
-        
         try:
-            # Verificar se a conexão com o banco de dados está ativa
             if not (self.app.db_manager.connection and self.app.db_manager.connection.is_connected()):
                 print("Aviso: Conexão com o banco de dados não está ativa")
                 data = []
                 total_count = 0
             else:
-                # Obter dados paginados e filtrados
                 data, total_count = self.app.db_manager.get_ocr_results(
                     offset=offset,
                     limit=self.items_per_page,
@@ -204,41 +295,46 @@ class OCRResultsView(MDBoxLayout):
             print(f"Erro ao carregar dados de OCR: {e}")
             data = []
             total_count = 0
-        
         # Calcular total de páginas
         self.total_pages = max(1, (total_count + self.items_per_page - 1) // self.items_per_page)
-        
         # Verificar se a página atual é válida
         if self.page > self.total_pages and self.total_pages > 0:
             self.page = self.total_pages
-            # Recarregar dados com a página corrigida
             return self.load_data()
-        
-        # Atualizar label de página
+        # Atualizar labels de informação com formatação melhorada
         self.page_label.text = f"Página {self.page} de {self.total_pages}"
-        
-        # Atualizar estado dos botões de navegação
+        if total_count == 0:
+            self.records_label.text = "Nenhum registro encontrado"
+        elif total_count == 1:
+            self.records_label.text = "1 registro encontrado"
+        else:
+            self.records_label.text = f"{total_count:,} registros encontrados".replace(',', '.')
+        # Atualizar estado dos botões de navegação com melhor feedback visual
         self.prev_button.disabled = self.page <= 1
         self.next_button.disabled = self.page >= self.total_pages
-        
+        if self.prev_button.disabled:
+            self.prev_button.md_bg_color = (0.6, 0.6, 0.6, 1)
+            self.prev_button.text_color = (0.8, 0.8, 0.8, 1)
+        else:
+            self.prev_button.md_bg_color = (0.2, 0.6, 1, 1)
+            self.prev_button.text_color = (1, 1, 1, 1)
+        if self.next_button.disabled:
+            self.next_button.md_bg_color = (0.6, 0.6, 0.6, 1)
+            self.next_button.text_color = (0.8, 0.8, 0.8, 1)
+        else:
+            self.next_button.md_bg_color = (0.2, 0.6, 1, 1)
+            self.next_button.text_color = (1, 1, 1, 1)
         # Formatar dados para a tabela
         table_data = []
         for row in data:
-            # Extrair texto dos resultados JSON
             text_results = row.get('text_results_parsed', {})
-            # Verificar se text_results é um dicionário ou uma lista
             if isinstance(text_results, dict):
                 text = text_results.get('text', '')
             elif isinstance(text_results, list) and text_results:
-                # Se for uma lista, tenta pegar o primeiro item ou texto vazio
                 text = text_results[0].get('text', '') if isinstance(text_results[0], dict) else str(text_results[0])
             else:
                 text = ''
-            
-            # Limitar tamanho do texto para exibição na tabela
             text_display = (text[:100] + '...') if len(text) > 100 else text
-            
-            # Calcular confiança média
             if isinstance(text_results, dict):
                 confidence = text_results.get('confidence', 0)
             elif isinstance(text_results, list) and text_results:
@@ -248,27 +344,20 @@ class OCRResultsView(MDBoxLayout):
                     confidence = 0
             else:
                 confidence = 0
-                
             confidence_display = f"{confidence:.2f}" if confidence is not None else 'N/A'
-            
-            # Formatar datas
             created_at = row.get('created_at')
             created_at = created_at.strftime('%d/%m/%Y %H:%M') if created_at else 'N/A'
-            
             last_used = row.get('last_used')
             last_used = last_used.strftime('%d/%m/%Y %H:%M') if last_used else 'N/A'
-            
             table_data.append([
-                str(row.get('id', 'N/A')),  # ID
-                text_display,  # Texto Detectado
-                row.get('source_lang', 'N/A'),  # Idioma
-                confidence_display,  # Confiança Média
-                created_at,  # Criado em
-                last_used,  # Último Uso
-                str(row.get('usage_count', 0))  # Contagem de Uso
+                str(row.get('id', 'N/A')),
+                text_display,
+                row.get('source_lang', 'N/A'),
+                confidence_display,
+                created_at,
+                last_used,
+                str(row.get('usage_count', 0))
             ])
-        
-        # Atualizar dados da tabela
         self.data_table.row_data = table_data
     
     def on_pagination(self, table, pagination_menu_instance):
@@ -384,7 +473,7 @@ class OCRResultsView(MDBoxLayout):
                     **Confiança:** {confidence:.2f}\n
                     **Criado em:** {created_at}\n
                     **Último Uso:** {last_used}\n
-                    **Contagem de Uso:** {ocr_result['usage_count']}\n
+                    **Contagem de Uso:** {ocr_result.get('used_count', 'N/A')}\n
                     **Hash da Imagem:** {ocr_result.get('image_hash', 'N/A')}"""
         
         # Adicionar metadados se disponíveis
@@ -412,3 +501,366 @@ class OCRResultsView(MDBoxLayout):
         )
         
         self.dialog.open()
+    
+    def show_items_per_page_menu(self, instance):
+        # Exibe o menu dropdown para selecionar itens por página
+        menu_items = [
+            {
+                "text": str(i),
+                "viewclass": "OneLineListItem",
+                "on_release": lambda x=i: self.set_items_per_page(x)
+            }
+            for i in [5, 10, 20, 30, 50]
+        ]
+        self.items_per_page_menu = MDDropdownMenu(
+            caller=self.items_per_page_button,
+            items=menu_items,
+            width_mult=3
+        )
+        self.items_per_page_menu.open()
+
+    def set_items_per_page(self, value):
+        # Atualiza a quantidade de itens por página e recarrega os dados
+        self.items_per_page = value
+        self.items_per_page_button.text = f"{value} por página"
+        # Garantir que rows_num seja suficiente para exibir todos os itens solicitados
+        self.data_table.rows_num = max(value, 100)
+        self.page = 1
+        self.items_per_page_menu.dismiss()
+        self.load_data()
+    
+    def get_all_data_for_export(self):
+        """Obtém todos os dados para exportação sem paginação"""
+        try:
+            if not self.app.db_manager.connection or not self.app.db_manager.connection.is_connected():
+                print("Erro: Conexão com o banco de dados não está ativa")
+                return []
+            
+            # Construir query base
+            query = """
+                SELECT 
+                    id,
+                    text_results,
+                    source_lang,
+                    confidence,
+                    created_at,
+                    last_used,
+                    used_count
+                FROM ocr_results
+            """
+            
+            params = []
+            conditions = []
+            
+            # Adicionar filtro de pesquisa se houver
+            if hasattr(self, 'search_field') and self.search_field.text.strip():
+                conditions.append("text_results LIKE %s")
+                params.append(f"%{self.search_field.text.strip()}%")
+            
+            # Adicionar filtro de idioma se houver
+            if hasattr(self, 'selected_lang') and self.selected_lang:
+                conditions.append("source_lang = %s")
+                params.append(self.selected_lang)
+            
+            # Adicionar condições WHERE se houver
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            
+            # Ordenar por ID decrescente
+            query += " ORDER BY id DESC"
+            
+            cursor = self.app.db_manager.connection.cursor(dictionary=True)
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+            cursor.close()
+            
+            return results
+            
+        except Exception as e:
+            print(f"Erro ao obter dados para exportação: {e}")
+            return []
+    
+    def export_to_csv(self, instance):
+        """Exporta dados para arquivo CSV"""
+        try:
+            data = self.get_all_data_for_export()
+            if not data:
+                self.show_export_dialog("Erro", "Nenhum dado disponível para exportação.")
+                return
+            
+            # Criar nome do arquivo com timestamp
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"ocr_results_export_{timestamp}.csv"
+            filepath = os.path.join(os.path.expanduser("~"), "Downloads", filename)
+            
+            # Escrever arquivo CSV
+            with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                # Cabeçalho
+                writer.writerow([
+                    'ID', 'Texto Detectado', 'Idioma', 'Confiança', 
+                    'Criado em', 'Último Uso', 'Contagem de Uso'
+                ])
+                
+                # Dados
+                for row in data:
+                    # Formatar datas
+                    created_at = row.get('created_at')
+                    created_at = created_at.strftime('%d/%m/%Y %H:%M:%S') if created_at else 'N/A'
+                    
+                    last_used = row.get('last_used')
+                    last_used = last_used.strftime('%d/%m/%Y %H:%M:%S') if last_used else 'N/A'
+                    
+                    # Extrair texto do campo text_results (JSON)
+                    text_results = row.get('text_results', '')
+                    if text_results:
+                        try:
+                            text_data = json.loads(text_results) if isinstance(text_results, str) else text_results
+                            if isinstance(text_data, dict):
+                                detected_text = text_data.get('text', '')
+                            elif isinstance(text_data, list) and text_data:
+                                detected_text = text_data[0].get('text', '') if isinstance(text_data[0], dict) else str(text_data[0])
+                            else:
+                                detected_text = str(text_data)
+                        except (json.JSONDecodeError, AttributeError):
+                            detected_text = str(text_results)
+                    else:
+                        detected_text = ''
+                    
+                    csv_row = [
+                        row.get('id', ''),
+                        detected_text,
+                        row.get('source_lang', ''),
+                        row.get('confidence', ''),
+                        created_at,
+                        last_used,
+                        row.get('used_count', '')
+                    ]
+                    writer.writerow(csv_row)
+            
+            self.show_export_dialog("Sucesso", f"Arquivo CSV exportado com sucesso!\nLocal: {filepath}")
+            
+        except Exception as e:
+            self.show_export_dialog("Erro", f"Erro ao exportar CSV: {str(e)}")
+    
+    def export_to_json(self, instance):
+        """Exporta dados para arquivo JSON"""
+        try:
+            data = self.get_all_data_for_export()
+            if not data:
+                self.show_export_dialog("Erro", "Nenhum dado disponível para exportação.")
+                return
+            
+            # Criar nome do arquivo com timestamp
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"ocr_results_export_{timestamp}.json"
+            filepath = os.path.join(os.path.expanduser("~"), "Downloads", filename)
+            
+            # Converter dados para formato JSON serializável
+            json_data = []
+            for row in data:
+                # Formatar datas para string
+                created_at = row.get('created_at')
+                created_at = created_at.strftime('%Y-%m-%d %H:%M:%S') if created_at else None
+                
+                last_used = row.get('last_used')
+                last_used = last_used.strftime('%Y-%m-%d %H:%M:%S') if last_used else None
+                
+                # Extrair texto do campo text_results (JSON)
+                text_results = row.get('text_results', '')
+                if text_results:
+                    try:
+                        text_data = json.loads(text_results) if isinstance(text_results, str) else text_results
+                        if isinstance(text_data, dict):
+                            detected_text = text_data.get('text', '')
+                        elif isinstance(text_data, list) and text_data:
+                            detected_text = text_data[0].get('text', '') if isinstance(text_data[0], dict) else str(text_data[0])
+                        else:
+                            detected_text = str(text_data)
+                    except (json.JSONDecodeError, AttributeError):
+                        detected_text = str(text_results)
+                else:
+                    detected_text = ''
+                
+                json_row = {
+                    'id': row.get('id'),
+                    'detected_text': detected_text,
+                    'language': row.get('source_lang'),
+                    'confidence': float(row.get('confidence', 0)) if row.get('confidence') is not None else None,
+                    'created_at': created_at,
+                    'last_used': last_used,
+                    'used_count': row.get('used_count', 0)
+                }
+                json_data.append(json_row)
+            
+            # Escrever arquivo JSON
+            with open(filepath, 'w', encoding='utf-8') as jsonfile:
+                json.dump({
+                    'export_info': {
+                        'timestamp': timestamp,
+                        'total_records': len(json_data),
+                        'exported_by': 'RetroArch Admin Interface'
+                    },
+                    'ocr_results': json_data
+                }, jsonfile, indent=2, ensure_ascii=False)
+            
+            self.show_export_dialog("Sucesso", f"Arquivo JSON exportado com sucesso!\nLocal: {filepath}")
+            
+        except Exception as e:
+            self.show_export_dialog("Erro", f"Erro ao exportar JSON: {str(e)}")
+    
+    def export_to_pdf(self, instance):
+        """Exporta dados para arquivo PDF"""
+        try:
+            data = self.get_all_data_for_export()
+            if not data:
+                self.show_export_dialog("Erro", "Nenhum dado disponível para exportação.")
+                return
+            
+            # Criar nome do arquivo com timestamp
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"ocr_results_export_{timestamp}.pdf"
+            filepath = os.path.join(os.path.expanduser("~"), "Downloads", filename)
+            
+            # Criar documento PDF em orientação paisagem
+            from reportlab.lib.pagesizes import landscape
+            from reportlab.platypus import PageBreak
+            doc = SimpleDocTemplate(filepath, pagesize=landscape(A4))
+            elements = []
+            
+            # Estilos
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=16,
+                spaceAfter=30,
+                alignment=1  # Centralizado
+            )
+            
+            # Título
+            title = Paragraph("Relatório de Resultados OCR - RetroArch", title_style)
+            elements.append(title)
+            elements.append(Spacer(1, 12))
+            
+            # Informações do relatório
+            info_style = styles['Normal']
+            info_text = f"""Data de Exportação: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}<br/>
+            Total de Registros: {len(data)}<br/>
+            Gerado por: RetroArch Admin Interface"""
+            info_para = Paragraph(info_text, info_style)
+            elements.append(info_para)
+            elements.append(Spacer(1, 20))
+            
+            # Preparar cabeçalho da tabela
+            headers = ['ID', 'Texto Detectado', 'Idioma', 'Confiança', 'Criação', 'Últ. Uso', 'Usos']
+            
+            # Preparar dados das linhas
+            rows_data = []
+            for row in data:
+                # Extrair texto do campo text_results (JSON)
+                text_results = row.get('text_results', '')
+                if text_results:
+                    try:
+                        text_data = json.loads(text_results) if isinstance(text_results, str) else text_results
+                        if isinstance(text_data, dict):
+                            detected_text = text_data.get('text', '')
+                        elif isinstance(text_data, list) and text_data:
+                            detected_text = text_data[0].get('text', '') if isinstance(text_data[0], dict) else str(text_data[0])
+                        else:
+                            detected_text = str(text_data)
+                    except (json.JSONDecodeError, AttributeError):
+                        detected_text = str(text_results)
+                else:
+                    detected_text = ''
+                
+                # Truncar textos longos para caber na página
+                detected_text = detected_text[:40] + '...' if len(detected_text) > 40 else detected_text
+                
+                # Formatar datas
+                created_at = row.get('created_at')
+                created_at = created_at.strftime('%d/%m/%y %H:%M') if created_at else 'N/A'
+                
+                last_used = row.get('last_used')
+                last_used = last_used.strftime('%d/%m/%y %H:%M') if last_used else 'N/A'
+                
+                # Formatar confiança
+                confidence = f"{row.get('confidence', 0):.2f}" if row.get('confidence') is not None else 'N/A'
+                
+                pdf_row = [
+                    str(row.get('id', '')),
+                    detected_text,
+                    str(row.get('source_lang', '')),
+                    confidence,
+                    created_at,
+                    last_used,
+                    str(row.get('used_count', 0))
+                ]
+                rows_data.append(pdf_row)
+            
+            # Dividir dados em páginas (20 linhas por página para garantir que caiba com cabeçalho)
+            rows_per_page = 20
+            col_widths = [0.7*inch, 3.5*inch, 1.0*inch, 1.0*inch, 1.2*inch, 1.2*inch, 0.8*inch]
+            
+            # Estilo comum para todas as tabelas
+            table_style = TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('WORDWRAP', (0, 0), (-1, -1), True)
+            ])
+            
+            # Criar tabelas com cabeçalho repetido para cada página
+            for i in range(0, len(rows_data), rows_per_page):
+                # Se não é a primeira tabela, adicionar quebra de página
+                if i > 0:
+                    elements.append(PageBreak())
+                
+                # Pegar as linhas para esta página
+                page_rows = rows_data[i:i + rows_per_page]
+                
+                # Criar dados da tabela com cabeçalho + linhas da página
+                table_data = [headers] + page_rows
+                
+                # Criar tabela
+                table = Table(table_data, colWidths=col_widths)
+                table.setStyle(table_style)
+                
+                elements.append(table)
+                
+                # Adicionar pequeno espaço após cada tabela
+                elements.append(Spacer(1, 12))
+            
+            # Construir PDF
+            doc.build(elements)
+            
+            self.show_export_dialog("Sucesso", f"Arquivo PDF exportado com sucesso!\nLocal: {filepath}")
+            
+        except Exception as e:
+            self.show_export_dialog("Erro", f"Erro ao exportar PDF: {str(e)}")
+    
+    def show_export_dialog(self, title, message):
+        """Mostra diálogo de resultado da exportação"""
+        if hasattr(self, 'export_dialog') and self.export_dialog:
+            self.export_dialog.dismiss()
+        
+        self.export_dialog = MDDialog(
+            title=title,
+            text=message,
+            buttons=[
+                MDFlatButton(
+                    text="OK",
+                    on_release=lambda x: self.export_dialog.dismiss()
+                )
+            ]
+        )
+        self.export_dialog.open()

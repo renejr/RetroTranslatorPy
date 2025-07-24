@@ -4,6 +4,14 @@
 
 Esta é a interface administrativa para o serviço de IA do RetroArch. Ela permite gerenciar e visualizar traduções, resultados de OCR e estatísticas do sistema.
 
+### ✨ Funcionalidades Principais
+
+- 📊 **Visualização de Traduções** - Tabela interativa com paginação e filtros
+- 🔍 **Resultados de OCR** - Análise detalhada de textos extraídos
+- 📈 **Estatísticas do Sistema** - Gráficos de performance e uso
+- 📤 **Exportação de Dados** - Suporte a CSV, JSON e PDF
+- 🔧 **Gerenciamento de Dados** - Operações CRUD no banco de dados
+
 ## Requisitos
 
 - Python 3.8 ou superior (testado até Python 3.13)
@@ -115,3 +123,37 @@ real_row_index = instance_row.index // number_of_columns
 ```
 
 Agora qualquer clique em qualquer célula de uma linha retorna os dados corretos da linha correspondente.
+
+## 📤 Funcionalidades de Exportação
+
+A interface administrativa inclui funcionalidades completas de exportação de dados:
+
+### Formatos Suportados
+
+- **CSV** - Formato de planilha compatível com Excel e Google Sheets
+- **JSON** - Formato estruturado para integração com outras aplicações
+- **PDF** - Relatórios formatados para impressão e compartilhamento
+
+### Como Usar
+
+1. **Acesse a visualização desejada** (Traduções ou Resultados OCR)
+2. **Clique no botão "Exportar"** no canto superior direito
+3. **Selecione o formato** de exportação desejado
+4. **Aguarde o processamento** - um diálogo confirmará o sucesso
+5. **Localize o arquivo** na pasta do projeto com timestamp único
+
+### Características da Exportação
+
+- **Filtros Aplicados** - Exporta apenas os dados visíveis com filtros ativos
+- **Timestamps Únicos** - Cada arquivo tem data/hora para evitar sobrescrita
+- **Formatação Inteligente** - Datas e textos são formatados adequadamente
+- **Tratamento de JSON** - Campos JSON são extraídos e formatados corretamente
+- **Paginação Ignorada** - Exporta todos os dados, não apenas a página atual
+
+### Exemplos de Arquivos Gerados
+
+```
+translations_export_20231221_143052.csv
+ocr_results_export_20231221_143125.json
+translations_export_20231221_143200.pdf
+```

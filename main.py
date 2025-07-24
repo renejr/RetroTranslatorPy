@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="RetroTranslatorPy",
     description="Um serviço de tradução com IA para o RetroArch usando Python e FastAPI.",
-    version="1.0.0",
+    version="1.1.0",
     lifespan=lifespan
 )
 
