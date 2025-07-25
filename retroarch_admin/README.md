@@ -6,11 +6,14 @@ Esta é a interface administrativa para o serviço de IA do RetroArch. Ela permi
 
 ### ✨ Funcionalidades Principais
 
-- 📊 **Visualização de Traduções** - Tabela interativa com paginação e filtros
-- 🔍 **Resultados de OCR** - Análise detalhada de textos extraídos
+- 📊 **Visualização de Traduções** - Histórico completo de traduções com paginação e filtros avançados
+- 🔍 **Filtros de Busca** - Sistema robusto de filtros por texto, idioma de origem e destino
+- 🔍 **Resultados de OCR** - Análise detalhada dos textos extraídos com busca estruturada JSON_CONTAINS
+- ⚡ **Busca em Tempo Real** - Aplicação automática de filtros conforme digitação
 - 📈 **Estatísticas do Sistema** - Gráficos de performance e uso
-- 📤 **Exportação de Dados** - Suporte a CSV, JSON e PDF
-- 🔧 **Gerenciamento de Dados** - Operações CRUD no banco de dados
+- 📤 **Exportação de Dados** - Suporte a CSV, JSON e PDF com filtros aplicados
+- 🔧 **Gerenciamento de Dados** - Interface intuitiva para análise de dados
+- 📄 **Paginação Inteligente** - Mantém filtros ativos durante navegação entre páginas
 
 ## Requisitos
 
