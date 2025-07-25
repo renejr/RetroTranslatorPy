@@ -39,6 +39,10 @@ class OCRResultsView(MDBoxLayout):
         self.selected_lang = None
         self.languages = []
         
+        # Variáveis para controle de ordenação (padrão: último uso descendente)
+        self.current_sort_column = "last_used"
+        self.current_sort_direction = "DESC"
+        
         # Carregar idiomas
         self._load_languages()
         
@@ -108,6 +112,13 @@ class OCRResultsView(MDBoxLayout):
             padding=[0, dp(5), 0, dp(5)]
         )
         
+        # Botões de ordenação
+        self.sort_button = MDRaisedButton(
+            text="Ordenar por: Último Uso ↓",
+            size_hint_x=0.3,
+            on_release=self.show_sort_menu
+        )
+        
         # Botões de exportação
         self.export_csv_button = MDRaisedButton(
             text="Exportar CSV",
@@ -128,29 +139,28 @@ class OCRResultsView(MDBoxLayout):
         )
         
         # Adicionar botões ao layout de exportação
+        self.export_layout.add_widget(self.sort_button)
         self.export_layout.add_widget(self.export_csv_button)
         self.export_layout.add_widget(self.export_json_button)
         self.export_layout.add_widget(self.export_pdf_button)
-        
-        # Adicionar espaço vazio para alinhar à direita
-        self.export_layout.add_widget(MDLabel(size_hint_x=0.4))
+        self.export_layout.add_widget(MDLabel(size_hint_x=0.1))
         
         # Adicionar layout de exportação à view
         self.add_widget(self.export_layout)
         
-        # Criar tabela de dados
+        # Criar tabela de dados com ordenação por clique nos cabeçalhos
         self.data_table = MDDataTable(
             size_hint=(1, 0.85),
             use_pagination=False,
             rows_num=max(self.items_per_page, 100),  # Garantir que rows_num seja suficiente
             column_data=[
-                ("ID", dp(30)),
-                ("Texto Detectado", dp(200)),
-                ("Idioma", dp(50)),
-                ("Confiança Média", dp(50)),
-                ("Criado em", dp(60)),
-                ("Último Uso", dp(60)),
-                ("Contagem de Uso", dp(50))
+                ("ID", dp(30), lambda *args: self.sort_column("id")),
+                ("Texto Detectado", dp(200), lambda *args: self.sort_column("text_results")),
+                ("Idioma", dp(50), lambda *args: self.sort_column("source_lang")),
+                ("Confiança Média", dp(50), lambda *args: self.sort_column("confidence")),
+                ("Criado em", dp(60), lambda *args: self.sort_column("created_at")),
+                ("Último Uso", dp(60), lambda *args: self.sort_column("last_used")),
+                ("Contagem de Uso", dp(50), lambda *args: self.sort_column("usage_count"))
             ]
         )
         
@@ -244,7 +254,7 @@ class OCRResultsView(MDBoxLayout):
         # --- FIM DA REESTRUTURAÇÃO DE PAGINAÇÃO ---
     
     def show_lang_menu(self, button):
-        # Criar menu de idiomas
+        # Exibe o menu dropdown para seleção de idioma
         menu_items = [
             {
                 "text": "Todos",
@@ -263,10 +273,43 @@ class OCRResultsView(MDBoxLayout):
         self.lang_menu = MDDropdownMenu(
             caller=button,
             items=menu_items,
-            width_mult=4
+            width_mult=4,
         )
-        
         self.lang_menu.open()
+    
+    def show_sort_menu(self, button):
+        # Exibe o menu dropdown para seleção de ordenação
+        sort_options = [
+            ("ID ↑", "id", "ASC"),
+            ("ID ↓", "id", "DESC"),
+            ("Texto ↑", "text_results", "ASC"),
+            ("Texto ↓", "text_results", "DESC"),
+            ("Idioma ↑", "source_lang", "ASC"),
+            ("Idioma ↓", "source_lang", "DESC"),
+            ("Confiança ↑", "confidence", "ASC"),
+            ("Confiança ↓", "confidence", "DESC"),
+            ("Criação ↑", "created_at", "ASC"),
+            ("Criação ↓", "created_at", "DESC"),
+            ("Último Uso ↑", "last_used", "ASC"),
+            ("Último Uso ↓", "last_used", "DESC"),
+            ("Uso ↑", "usage_count", "ASC"),
+            ("Uso ↓", "usage_count", "DESC")
+        ]
+        
+        menu_items = []
+        for display_text, column, direction in sort_options:
+            menu_items.append({
+                "text": display_text,
+                "viewclass": "OneLineListItem",
+                "on_release": lambda x=column, y=direction, z=display_text: self.set_sort_option(x, y, z),
+            })
+        
+        self.sort_menu = MDDropdownMenu(
+            caller=button,
+            items=menu_items,
+            width_mult=4,
+        )
+        self.sort_menu.open()
     
     def set_lang(self, lang):
         # Definir idioma selecionado
@@ -275,10 +318,107 @@ class OCRResultsView(MDBoxLayout):
         self.lang_menu.dismiss()
         self.load_data()
     
+    def sort_column(self, column_name):
+        """Gerencia a ordenação das colunas quando o cabeçalho é clicado"""
+        # Se é a mesma coluna, alternar direção
+        if self.current_sort_column == column_name:
+            self.current_sort_direction = 'DESC' if self.current_sort_direction == 'ASC' else 'ASC'
+        else:
+            # Nova coluna, começar com ASC
+            self.current_sort_column = column_name
+            self.current_sort_direction = 'ASC'
+        
+        # Atualizar o texto do botão de ordenação para refletir a mudança
+        self._update_sort_button_text()
+        
+        # Voltar para a primeira página ao ordenar
+        self.page = 1
+        
+        # Recarregar dados com nova ordenação
+        self.load_data()
+        
+        # Obter dados atuais da tabela
+        current_data = self.data_table.row_data
+        
+        # Mapear nome da coluna para índice
+        column_mapping = {
+            "id": 0,
+            "text_results": 1,
+            "source_lang": 2,
+            "confidence": 3,
+            "created_at": 4,
+            "last_used": 5,
+            "usage_count": 6
+        }
+        
+        column_index = column_mapping.get(column_name, 0)
+        
+        # Ordenar dados usando o formato requerido pelo MDDataTable
+        # Formato: [Index, Sorted_Row_Data] usando zip(*sorted(enumerate(data), key=...))
+        if self.current_sort_direction == 'ASC':
+            sorted_data = zip(*sorted(enumerate(current_data), key=lambda l: str(l[1][column_index]).lower()))
+        else:
+            sorted_data = zip(*sorted(enumerate(current_data), key=lambda l: str(l[1][column_index]).lower(), reverse=True))
+        
+        # Converter para listas
+        indices, sorted_rows = map(list, sorted_data)
+        
+        return [indices, sorted_rows]
+    
+    def _update_sort_button_text(self):
+        """Atualiza o texto do botão de ordenação com base na coluna e direção atuais"""
+        # Mapeamento de colunas para nomes amigáveis
+        column_names = {
+            "id": "ID",
+            "text_results": "Texto",
+            "source_lang": "Idioma",
+            "confidence": "Confiança",
+            "created_at": "Criação",
+            "last_used": "Último Uso",
+            "usage_count": "Uso"
+        }
+        
+        # Obter nome amigável da coluna
+        column_display = column_names.get(self.current_sort_column, self.current_sort_column)
+        
+        # Adicionar ícone de direção
+        arrow_icon = "↑" if self.current_sort_direction == "ASC" else "↓"
+        
+        # Atualizar texto do botão
+        self.sort_button.text = f"Ordenar por: {column_display} {arrow_icon}"
+    
+    def set_sort_option(self, column, direction, display_text):
+        """Define a opção de ordenação selecionada"""
+        self.current_sort_column = column
+        self.current_sort_direction = direction
+        
+        # Adicionar ícones de seta ao texto do botão para indicar direção
+        arrow_icon = "↑" if direction == "ASC" else "↓"
+        column_name = display_text.replace(" ↑", "").replace(" ↓", "")
+        self.sort_button.text = f"Ordenar por: {column_name} {arrow_icon}"
+        
+        self.sort_menu.dismiss()
+        
+        # Voltar para a primeira página ao ordenar
+        self.page = 1
+        
+        # Recarregar dados com nova ordenação
+        self.load_data()
+        
+        print(f"[DEBUG] Ordenação aplicada: {column} {direction}")
+    
     def load_data(self):
         # Obter dados do banco de dados
         search_text = self.search_field.text
         offset = (self.page - 1) * self.items_per_page
+        
+        # Preparar parâmetros de ordenação
+        order_by = self.current_sort_column if self.current_sort_column else None
+        order_direction = self.current_sort_direction
+        
+        if order_by:
+            print(f"[DEBUG] Aplicando ordenação: {order_by} {order_direction}")
+        
         try:
             if not (self.app.db_manager.connection and self.app.db_manager.connection.is_connected()):
                 print("Aviso: Conexão com o banco de dados não está ativa")
@@ -289,7 +429,9 @@ class OCRResultsView(MDBoxLayout):
                     offset=offset,
                     limit=self.items_per_page,
                     search_text=search_text if search_text else None,
-                    source_lang=self.selected_lang
+                    source_lang=self.selected_lang,
+                    order_by=order_by,
+                    order_direction=order_direction
                 )
         except Exception as e:
             print(f"Erro ao carregar dados de OCR: {e}")
@@ -326,7 +468,9 @@ class OCRResultsView(MDBoxLayout):
             self.next_button.text_color = (1, 1, 1, 1)
         # Formatar dados para a tabela
         table_data = []
-        for row in data:
+        raw_data_for_debug = []  # Para comparação no debug
+        
+        for i, row in enumerate(data):
             text_results = row.get('text_results_parsed', {})
             if isinstance(text_results, dict):
                 text = text_results.get('text', '')
@@ -335,29 +479,63 @@ class OCRResultsView(MDBoxLayout):
             else:
                 text = ''
             text_display = (text[:100] + '...') if len(text) > 100 else text
-            if isinstance(text_results, dict):
-                confidence = text_results.get('confidence', 0)
-            elif isinstance(text_results, list) and text_results:
-                if isinstance(text_results[0], dict):
-                    confidence = text_results[0].get('confidence', 0)
-                else:
-                    confidence = 0
-            else:
-                confidence = 0
+            # Usar a confiança diretamente da coluna do banco de dados
+            confidence = row.get('confidence', 0)
             confidence_display = f"{confidence:.2f}" if confidence is not None else 'N/A'
             created_at = row.get('created_at')
-            created_at = created_at.strftime('%d/%m/%Y %H:%M') if created_at else 'N/A'
+            created_at_display = created_at.strftime('%d/%m/%Y %H:%M') if created_at else 'N/A'
             last_used = row.get('last_used')
-            last_used = last_used.strftime('%d/%m/%Y %H:%M') if last_used else 'N/A'
-            table_data.append([
+            last_used_display = last_used.strftime('%d/%m/%Y %H:%M') if last_used else 'N/A'
+            
+            # Dados formatados para o grid
+            formatted_row = [
                 str(row.get('id', 'N/A')),
                 text_display,
                 row.get('source_lang', 'N/A'),
                 confidence_display,
-                created_at,
-                last_used,
+                created_at_display,
+                last_used_display,
                 str(row.get('usage_count', 0))
-            ])
+            ]
+            table_data.append(formatted_row)
+            
+            # Dados brutos para debug
+            raw_data_for_debug.append({
+                'id': row.get('id'),
+                'confidence_raw': row.get('confidence'),
+                'confidence_parsed': confidence,
+                'created_at_raw': row.get('created_at'),
+                'last_used_raw': row.get('last_used'),
+                'usage_count': row.get('usage_count')
+            })
+        
+        # DEBUG: Mostrar dados que estão sendo exibidos no grid
+        print(f"[DEBUG] === DADOS EXIBIDOS NO GRID ===")
+        print(f"[DEBUG] Total de linhas no grid: {len(table_data)}")
+        if table_data:
+            print(f"[DEBUG] Primeira linha do grid: {table_data[0]}")
+            if len(table_data) > 1:
+                print(f"[DEBUG] Última linha do grid: {table_data[-1]}")
+        
+        # DEBUG: Mostrar dados brutos vs dados formatados (DIFF)
+        print(f"[DEBUG] === COMPARAÇÃO: CONSULTA vs GRID ===")
+        if data and table_data:
+            for i in range(min(3, len(data))):  # Mostrar apenas os 3 primeiros para não poluir
+                print(f"[DEBUG] Registro {i+1}:")
+                print(f"[DEBUG]   Consulta - ID: {data[i].get('id')}, Confidence: {data[i].get('confidence')}, Created: {data[i].get('created_at')}")
+                print(f"[DEBUG]   Grid     - ID: {table_data[i][0]}, Confidence: {table_data[i][3]}, Created: {table_data[i][4]}")
+                
+                # Verificar se há diferenças
+                diff_found = False
+                if str(data[i].get('id')) != table_data[i][0]:
+                    print(f"[DEBUG]   ⚠️  DIFF ID: {data[i].get('id')} != {table_data[i][0]}")
+                    diff_found = True
+                if str(data[i].get('confidence')) != table_data[i][3].replace('.', '').replace(',', '.'):
+                    print(f"[DEBUG]   ⚠️  DIFF Confidence: {data[i].get('confidence')} != {table_data[i][3]}")
+                    diff_found = True
+                if not diff_found:
+                    print(f"[DEBUG]   ✅ Dados consistentes")
+        
         self.data_table.row_data = table_data
     
     def on_pagination(self, table, pagination_menu_instance):
@@ -385,6 +563,8 @@ class OCRResultsView(MDBoxLayout):
             # Se tentar ir para uma página maior que o total, ficar na última página
             self.page = self.total_pages
             self.load_data()
+    
+
     
     def on_row_press(self, instance_table, instance_row):
         # Verificar se há dados na tabela

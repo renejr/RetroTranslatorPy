@@ -160,7 +160,7 @@ class DatabaseManager:
         self.cursor.execute(query, (translation_id,))
         return self.cursor.fetchone()
     
-    def get_ocr_results(self, limit=100, offset=0, search_text=None, source_lang=None):
+    def get_ocr_results(self, limit=100, offset=0, search_text=None, source_lang=None, order_by=None, order_direction='ASC'):
         """Obtém resultados de OCR com paginação e filtros"""
         query = "SELECT * FROM ocr_results"
         count_query = "SELECT COUNT(*) as total FROM ocr_results"
@@ -183,9 +183,35 @@ class DatabaseManager:
             query += " WHERE " + " AND ".join(where_clauses)
             count_query += " WHERE " + " AND ".join(where_clauses)
         
-        # Adicionar ordenação e paginação
-        query += " ORDER BY last_used DESC LIMIT %s OFFSET %s"
+        # Mapeamento de colunas para ordenação
+        column_mapping = {
+            'id': 'id',
+            'text': 'text_results',
+            'text_results': 'text_results',  # Adicionar mapeamento direto para text_results
+            'source_lang': 'source_lang',
+            'confidence': 'confidence',
+            'created_at': 'created_at',
+            'last_used': 'last_used',
+            'usage_count': 'usage_count'
+        }
+        
+        # Adicionar ordenação
+        if order_by and order_by in column_mapping:
+            db_column = column_mapping[order_by]
+            # Validar direção da ordenação
+            direction = 'DESC' if order_direction.upper() == 'DESC' else 'ASC'
+            query += f" ORDER BY {db_column} {direction}"
+        else:
+            # Ordenação padrão
+            query += " ORDER BY last_used DESC"
+        
+        # Adicionar paginação
+        query += " LIMIT %s OFFSET %s"
         params.extend([limit, offset])
+        
+        # DEBUG: Mostrar query SQL gerada
+        print(f"[DEBUG] Query SQL gerada: {query}")
+        print(f"[DEBUG] Parâmetros da query: {params}")
         
         # Executar consulta de contagem
         self.cursor.execute(count_query, count_params)
@@ -194,6 +220,14 @@ class DatabaseManager:
         # Executar consulta de dados
         self.cursor.execute(query, params)
         results = self.cursor.fetchall()
+        
+        # DEBUG: Mostrar resultado bruto da consulta
+        print(f"[DEBUG] Total de registros encontrados: {total_count}")
+        print(f"[DEBUG] Registros retornados na página: {len(results)}")
+        if results:
+            print(f"[DEBUG] Primeiro registro da consulta: ID={results[0].get('id')}, Confidence={results[0].get('confidence')}, Created_at={results[0].get('created_at')}")
+            if len(results) > 1:
+                print(f"[DEBUG] Último registro da consulta: ID={results[-1].get('id')}, Confidence={results[-1].get('confidence')}, Created_at={results[-1].get('created_at')}")
         
         # Decodificar imagens Base64 e JSON
         for result in results:
