@@ -5,6 +5,34 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.2.1] - 2025-01-21
+
+### 🐛 Corrigido
+
+- **Correção da Coluna 'Cont. de Uso'** na interface administrativa
+  - Corrigida inconsistência entre nome da coluna no banco (`used_count`) e código (`usage_count`)
+  - Atualizado `ocr_results_view.py` para usar `used_count` corretamente
+  - Corrigido mapeamento de colunas em `database_manager.py`
+  - Corrigidas opções de ordenação para usar nome correto da coluna
+  - Agora a coluna exibe valores corretos em vez de sempre mostrar 0
+
+- **Correção da Ordenação por 'Cont. de Uso'**
+  - Corrigida inconsistência no mapeamento de colunas para ordenação
+  - Alinhamento entre chave de mapeamento e valor usado nas opções de sort
+  - Ordenação por contagem de uso agora funciona corretamente
+
+### 📚 Documentação
+
+- Atualizado `README_DATABASE.md` com nomes corretos das colunas
+- Corrigidas referências de `usage_count` para `used_count` na documentação
+- Documentação alinhada com estrutura real do banco de dados
+
+### 🔧 Técnico
+
+- Padronização de nomenclatura de colunas em todo o projeto
+- Eliminação de inconsistências entre modelo de dados e banco
+- Melhoria na consistência do código
+
 ## [1.2.0] - 2025-01-21
 
 ### ✨ Adicionado
