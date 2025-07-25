@@ -163,7 +163,7 @@ class TranslationsView(MDBoxLayout):
             use_pagination=False,  # Desabilitar paginação nativa
             rows_num=max(self.items_per_page, 100),  # Garantir que rows_num seja suficiente
             column_data=[
-                ("Row", dp(15), lambda *args: self.sort_column("Row")),
+                ("Row", dp(15)),  # Coluna Row sem funcionalidade de ordenação
                 ("ID", dp(18), lambda *args: self.sort_column("ID")),
                 ("Original", dp(60), lambda *args: self.sort_column("Original")),
                 ("Tradução", dp(60), lambda *args: self.sort_column("Tradução")),
@@ -491,6 +491,11 @@ class TranslationsView(MDBoxLayout):
     
     def sort_column(self, column_name):
         """Gerencia a ordenação das colunas quando o cabeçalho é clicado"""
+        # A coluna "Row" não deve ser ordenável - manter numeração sequencial
+        if column_name == "Row":
+            print("[DEBUG] Coluna Row não é ordenável - mantendo ordem original")
+            return
+        
         # Se é a mesma coluna, alternar direção
         if self.current_sort_column == column_name:
             self.current_sort_direction = 'DESC' if self.current_sort_direction == 'ASC' else 'ASC'
@@ -508,7 +513,7 @@ class TranslationsView(MDBoxLayout):
         # Obter dados atuais da tabela
         current_data = self.data_table.row_data
         
-        # Mapear nome da coluna para índice (ajustado para nova coluna Row)
+        # Mapear nome da coluna para índice (excluindo Row do mapeamento)
         column_mapping = {
             "Row": 0,
             "ID": 1,
@@ -523,7 +528,7 @@ class TranslationsView(MDBoxLayout):
             "Usos": 10
         }
         
-        column_index = column_mapping.get(column_name, 0)
+        column_index = column_mapping.get(column_name, 1)  # Default para ID se não encontrar
         
         # Ordenar dados usando o formato requerido pelo MDDataTable
         # Formato: [Index, Sorted_Row_Data] usando zip(*sorted(enumerate(data), key=...))
@@ -534,6 +539,15 @@ class TranslationsView(MDBoxLayout):
         
         # Converter para listas
         indices, sorted_rows = map(list, sorted_data)
+        
+        # Recriar numeração sequencial da coluna Row após ordenação
+        # A coluna Row SEMPRE mantém ordem ASC (1, 2, 3...) independente da direção de sort
+        # CORREÇÃO: Garantir que a numeração seja sempre crescente, não seguindo a direção da ordenação
+        for i, row in enumerate(sorted_rows):
+            row[0] = str(i + 1)  # SEMPRE crescente: 1, 2, 3... (nunca 3, 2, 1...)
+        
+        # Atualizar dados da tabela com nova ordenação e numeração Row corrigida
+        self.data_table.row_data = sorted_rows
         
         return [indices, sorted_rows]
     
