@@ -192,7 +192,7 @@ class DatabaseManager:
             'confidence': 'confidence',
             'created_at': 'created_at',
             'last_used': 'last_used',
-            'usage_count': 'usage_count'
+            'used_count': 'used_count'
         }
         
         # Adicionar ordenação

@@ -316,8 +316,8 @@ class OCRResultsView(MDBoxLayout):
             ("Criação v", "created_at", "DESC"),
             ("Último Uso ^", "last_used", "ASC"),
             ("Último Uso v", "last_used", "DESC"),
-            ("Uso ^", "usage_count", "ASC"),
-            ("Uso v", "usage_count", "DESC")
+            ("Uso ^", "used_count", "ASC"),
+            ("Uso v", "used_count", "DESC")
         ]
         
         menu_items = []
@@ -362,7 +362,7 @@ class OCRResultsView(MDBoxLayout):
             "confidence": "Confiança",
             "created_at": "Criação",
             "last_used": "Último Uso",
-            "usage_count": "Uso"
+            "used_count": "Uso"
         }
         
         # Obter nome amigável da coluna
@@ -508,7 +508,7 @@ class OCRResultsView(MDBoxLayout):
                 confidence_display,
                 created_at_display,
                 last_used_display,
-                str(row.get('usage_count', 0))
+                str(row.get('used_count', 0))
             ]
             table_data.append(formatted_row)
             
@@ -519,7 +519,7 @@ class OCRResultsView(MDBoxLayout):
                 'confidence_parsed': confidence,
                 'created_at_raw': row.get('created_at'),
                 'last_used_raw': row.get('last_used'),
-                'usage_count': row.get('usage_count')
+                'used_count': row.get('used_count')
             })
         
         # DEBUG: Mostrar dados que estão sendo exibidos no grid
@@ -666,11 +666,36 @@ class OCRResultsView(MDBoxLayout):
             orientation='vertical',
             spacing=dp(10),
             size_hint_y=None,
-            height=dp(500)
+            height=dp(700)  # Aumentado para acomodar as três seções e texto
         )
         
-        # Adicionar imagem se disponível
-        if ocr_result.get('image_base64'):  # image_base64
+        # Primeira linha: Layout horizontal com três seções
+        first_row_layout = MDBoxLayout(
+            orientation='horizontal',
+            spacing=dp(10),
+            size_hint_y=None,
+            height=dp(400)  # Altura fixa para a primeira linha
+        )
+        
+        # Seção 1: image_base64
+        image_base64_section = MDBoxLayout(
+            orientation='vertical',
+            size_hint_x=0.33,
+            spacing=dp(5)
+        )
+        
+        image_base64_title = MDLabel(
+            text="[b][color=ff0000]image_base64[/color][/b]",
+            markup=True,
+            size_hint_y=None,
+            height=dp(30),
+            halign="center",
+            theme_text_color="Primary"
+        )
+        image_base64_section.add_widget(image_base64_title)
+        
+        # Adicionar imagem base64 se disponível
+        if ocr_result.get('image_base64'):
             logger.debug("[DEBUG] Carregando imagem base64 para exibição")
             try:
                 # Decodificar imagem base64
@@ -684,35 +709,180 @@ class OCRResultsView(MDBoxLayout):
                 logger.debug("[DEBUG] CoreImage criada com sucesso")
                 
                 # Criar widget de imagem
-                image = Image(
+                image_base64_widget = Image(
                     texture=coreimage.texture,
-                    size_hint=(1, 0.5),
+                    size_hint_y=None,
+                    height=dp(350),
                     allow_stretch=True,
                     keep_ratio=True
                 )
-                content_layout.add_widget(image)
-                logger.debug("[DEBUG] Widget de imagem adicionado ao layout")
+                image_base64_section.add_widget(image_base64_widget)
+                logger.debug("[DEBUG] Widget de imagem base64 adicionado ao layout")
             except Exception as e:
-                logger.error("[ERROR] Erro ao carregar imagem: %s", str(e))
-                traceback.print_exc()
+                logger.error("[ERROR] Erro ao carregar imagem base64: %s", str(e))
+                no_image_label = MDLabel(
+                    text="Erro ao carregar\nimagem base64",
+                    halign="center",
+                    theme_text_color="Secondary"
+                )
+                image_base64_section.add_widget(no_image_label)
         else:
             logger.debug("[DEBUG] Nenhuma imagem base64 disponível para este resultado")
+            no_image_label = MDLabel(
+                text="Nenhuma imagem\nbase64 disponível",
+                halign="center",
+                theme_text_color="Secondary"
+            )
+            image_base64_section.add_widget(no_image_label)
+        
+        # Seção 2: original_image
+        original_image_section = MDBoxLayout(
+            orientation='vertical',
+            size_hint_x=0.33,
+            spacing=dp(5)
+        )
+        
+        original_image_title = MDLabel(
+            text="[b][color=ff0000]original_image[/color][/b]",
+            markup=True,
+            size_hint_y=None,
+            height=dp(30),
+            halign="center",
+            theme_text_color="Primary"
+        )
+        original_image_section.add_widget(original_image_title)
+        
+        # Adicionar imagem original se disponível
+        if ocr_result.get('original_image'):
+            logger.debug("[DEBUG] Carregando imagem original (BLOB) para exibição")
+            try:
+                # O campo original_image já é um BLOB (bytes)
+                original_image_data = ocr_result['original_image']
+                logger.debug("[DEBUG] Imagem original obtida com sucesso, tamanho: %d bytes", len(original_image_data))
+                
+                # Criar buffer de imagem
+                buffer = io.BytesIO(original_image_data)
+                # Carregar imagem
+                coreimage = CoreImage(buffer, ext='png')
+                logger.debug("[DEBUG] CoreImage da imagem original criada com sucesso")
+                
+                # Criar widget de imagem
+                original_image_widget = Image(
+                    texture=coreimage.texture,
+                    size_hint_y=None,
+                    height=dp(350),
+                    allow_stretch=True,
+                    keep_ratio=True
+                )
+                original_image_section.add_widget(original_image_widget)
+                logger.debug("[DEBUG] Widget de imagem original adicionado ao layout")
+            except Exception as e:
+                logger.error("[ERROR] Erro ao carregar imagem original: %s", str(e))
+                no_image_label = MDLabel(
+                    text="Erro ao carregar\nimagem original",
+                    halign="center",
+                    theme_text_color="Secondary"
+                )
+                original_image_section.add_widget(no_image_label)
+        else:
+            logger.debug("[DEBUG] Nenhuma imagem original disponível para este resultado")
+            no_image_label = MDLabel(
+                text="Nenhuma imagem\noriginal disponível",
+                halign="center",
+                theme_text_color="Secondary"
+            )
+            original_image_section.add_widget(no_image_label)
+        
+        # Seção 3: image_metadata
+        image_metadata_section = MDBoxLayout(
+            orientation='vertical',
+            size_hint_x=0.33,
+            spacing=dp(5)
+        )
+        
+        image_metadata_title = MDLabel(
+            text="[b][color=ff0000]image_metadata[/color][/b]",
+            markup=True,
+            size_hint_y=None,
+            height=dp(30),
+            halign="center",
+            theme_text_color="Primary"
+        )
+        image_metadata_section.add_widget(image_metadata_title)
+        
+        # Adicionar metadados da imagem se disponíveis
+        if ocr_result.get('image_metadata'):
+            logger.debug("[DEBUG] Processando metadados da imagem")
+            try:
+                # Parsear JSON dos metadados
+                if isinstance(ocr_result['image_metadata'], str):
+                    image_metadata = json.loads(ocr_result['image_metadata'])
+                else:
+                    image_metadata = ocr_result['image_metadata']
+                
+                # Formatar metadados para exibição
+                metadata_text = ""
+                for key, value in image_metadata.items():
+                    metadata_text += f"[b]{key}:[/b] {value}\n"
+                
+                metadata_label = MDLabel(
+                    text=metadata_text,
+                    markup=True,
+                    text_size=(None, None),
+                    size_hint_y=None,
+                    height=dp(350),
+                    halign="left",
+                    valign="top",
+                    theme_text_color="Primary"
+                )
+                image_metadata_section.add_widget(metadata_label)
+                logger.debug("[DEBUG] Metadados da imagem adicionados ao layout")
+            except Exception as e:
+                logger.error("[ERROR] Erro ao processar metadados da imagem: %s", str(e))
+                no_metadata_label = MDLabel(
+                    text="Erro ao processar\nmetadados",
+                    halign="center",
+                    theme_text_color="Secondary"
+                )
+                image_metadata_section.add_widget(no_metadata_label)
+        else:
+            logger.debug("[DEBUG] Nenhum metadado de imagem disponível para este resultado")
+            no_metadata_label = MDLabel(
+                text="Nenhum metadado\ndisponível",
+                halign="center",
+                theme_text_color="Secondary"
+            )
+            image_metadata_section.add_widget(no_metadata_label)
+        
+        # Adicionar as três seções ao layout horizontal
+        first_row_layout.add_widget(image_base64_section)
+        first_row_layout.add_widget(original_image_section)
+        first_row_layout.add_widget(image_metadata_section)
+        
+        # Adicionar a primeira linha ao layout principal
+        content_layout.add_widget(first_row_layout)
         
         # Adicionar informações de texto
-        text_info = f"""**ID:** {ocr_result['id']}\n\n
-                    **Texto Detectado:**\n{text}\n\n
-                    **Idioma:** {ocr_result['source_lang']}\n
-                    **Confiança:** {confidence:.2f}\n
-                    **Criado em:** {created_at}\n
-                    **Último Uso:** {last_used}\n
-                    **Contagem de Uso:** {ocr_result.get('used_count', 'N/A')}\n
-                    **Hash da Imagem:** {ocr_result.get('image_hash', 'N/A')}"""
+        text_info = f"""[b]ID:[/b] {ocr_result['id']}\n\n[b]Texto Detectado:[/b]\n{text}\n\n[b]Idioma:[/b] {ocr_result['source_lang']}\n[b]Confiança:[/b] {confidence:.2f}\n[b]Criado em:[/b] {created_at}\n[b]Último Uso:[/b] {last_used}\n[b]Contagem de Uso:[/b] {ocr_result.get('used_count', 'N/A')}\n[b]Hash da Imagem:[/b] {ocr_result.get('image_hash', 'N/A')}"""
         
         # Adicionar metadados se disponíveis
         if metadata:
-            text_info += "\n\n**Metadados:**\n"
+            text_info += "\n\n[b]Metadados:[/b]\n"
             for key, value in metadata.items():
                 text_info += f"- {key}: {value}\n"
+        
+        # Criar label para as informações textuais
+        text_label = MDLabel(
+            text=text_info,
+            markup=True,
+            text_size=(None, None),
+            size_hint_y=0.6,  # Ocupa 60% do espaço restante
+            halign="left",
+            valign="top",
+            theme_text_color="Primary"
+        )
+        content_layout.add_widget(text_label)
+        logger.debug("[DEBUG] Label de informações textuais adicionado ao layout")
         
         # Mostrar diálogo com detalhes do resultado OCR
         logger.debug("[DEBUG] Criando diálogo de detalhes para resultado OCR ID: %s", ocr_result.get('id'))
@@ -725,7 +895,6 @@ class OCRResultsView(MDBoxLayout):
             title="Detalhes do Resultado OCR",
             type="custom",
             content_cls=content_layout,
-            text=text_info,
             size_hint=(0.9, 0.9),
             buttons=[
                 MDFlatButton(

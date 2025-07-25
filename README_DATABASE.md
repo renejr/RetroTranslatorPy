@@ -69,7 +69,7 @@ Armazena textos originais e suas traduções:
 - `translator`: Serviço de tradução usado
 - `confidence`: Nível de confiança da tradução
 - `created_at`: Data de criação do registro
-- `usage_count`: Contador de uso da tradução
+- `used_count`: Contador de uso da tradução
 
 ### Tabela `ocr_results`
 
@@ -84,7 +84,7 @@ Armazena resultados de OCR para imagens:
 - `image_base64`: Imagem original em formato Base64 (texto)
 - `image_metadata`: Metadados da imagem em formato JSON (dimensões, idiomas, formato, etc.)
 - `created_at`: Data de criação do registro
-- `usage_count`: Contador de uso do resultado
+- `used_count`: Contador de uso do resultado
 
 ### Tabela `statistics`
 
