@@ -146,14 +146,17 @@ python main.py
 
 - **📝 Gerenciamento de Traduções:**
   - Visualização paginada de todas as traduções
-  - Filtros por idioma de origem e destino
+  - Filtros avançados por texto, idioma de origem e destino
+  - Busca em tempo real com aplicação automática de filtros
   - Seletor de itens por página (5, 10, 15, 20, 25, 50)
   - Busca e ordenação de resultados
 
 - **🔍 Resultados de OCR:**
-  - Análise de textos extraídos
+  - Análise de textos extraídos com busca avançada
+  - Filtros de busca estruturada usando JSON_CONTAINS
   - Visualização de coordenadas e confiança
   - Histórico completo de processamentos
+  - Busca por texto detectado em tempo real
   - Exportação de dados em CSV, JSON e PDF
 
 - **📊 Estatísticas:**
@@ -273,6 +276,39 @@ confidence = np.float32(0.95)
 # Depois (serialização garantida)
 bbox = [[int(x), int(y)] for x, y in bbox]
 confidence = float(confidence)
+```
+
+## 🔍 Sistema de Filtros Avançados
+
+A interface administrativa inclui um sistema robusto de filtros que permite busca precisa e eficiente:
+
+### Filtros para Resultados OCR
+
+- **Busca Estruturada:** Utiliza `JSON_CONTAINS` para busca precisa em campos JSON
+- **Busca por Texto:** Encontra textos específicos detectados pelo OCR
+- **Filtro por Idioma:** Filtra resultados por idioma de origem
+- **Busca em Tempo Real:** Aplicação automática de filtros conforme digitação
+
+### Filtros para Traduções
+
+- **Busca por Texto:** Busca tanto no texto original quanto na tradução
+- **Filtro por Idioma de Origem:** Filtra por idioma do texto original
+- **Filtro por Idioma de Destino:** Filtra por idioma da tradução
+- **Paginação Inteligente:** Mantém filtros ativos durante navegação
+
+### Otimização de Performance
+
+- **Consultas SQL Otimizadas:** Uso de índices apropriados para acelerar buscas
+- **Logging Detalhado:** Monitoramento de performance das consultas
+- **Cache de Resultados:** Reutilização de consultas frequentes
+
+Exemplo de uso do filtro JSON_CONTAINS:
+
+```sql
+-- Busca por texto específico em resultados OCR
+SELECT * FROM ocr_results 
+WHERE JSON_CONTAINS(text_results, JSON_OBJECT('text', 'IKARUGA'))
+ORDER BY last_used DESC;
 ```
 
 ### Expandindo o Sistema

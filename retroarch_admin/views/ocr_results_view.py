@@ -18,14 +18,28 @@ import json
 import datetime
 import csv
 import os
+import logging
+import traceback
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.lib.units import inch
 
+# Configurar logging para OCRResultsView
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('ocr_results_view.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger('OCRResultsView')
+
 class OCRResultsView(MDBoxLayout):
     def __init__(self, **kwargs):
+        logger.info("[DEBUG] Inicializando OCRResultsView")
         super().__init__(**kwargs)
         self.orientation = 'vertical'
         self.spacing = dp(10)
@@ -42,12 +56,21 @@ class OCRResultsView(MDBoxLayout):
         # Variáveis para controle de ordenação (padrão: último uso descendente)
         self.current_sort_column = "last_used"
         self.current_sort_direction = "DESC"
+        logger.debug("[DEBUG] Configuração inicial: ordenação por %s %s", self.current_sort_column, self.current_sort_direction)
         
-        # Carregar idiomas
-        self._load_languages()
-        
-        # Criar a interface
-        self._create_ui()
+        try:
+            # Carregar idiomas
+            logger.debug("[DEBUG] Carregando idiomas disponíveis")
+            self._load_languages()
+            
+            # Criar a interface
+            logger.debug("[DEBUG] Criando interface do usuário")
+            self._create_ui()
+            logger.info("[DEBUG] OCRResultsView inicializado com sucesso")
+        except Exception as e:
+            logger.error("[ERROR] Erro durante inicialização do OCRResultsView: %s", str(e))
+            traceback.print_exc()
+            raise
         
         # Carregar dados iniciais
         Clock.schedule_once(lambda dt: self.load_data(), 0.5)
@@ -114,7 +137,7 @@ class OCRResultsView(MDBoxLayout):
         
         # Botões de ordenação
         self.sort_button = MDRaisedButton(
-            text="Ordenar por: Último Uso ↓",
+            text="Ordenar por: Último Uso v",
             size_hint_x=0.3,
             on_release=self.show_sort_menu
         )
@@ -154,13 +177,14 @@ class OCRResultsView(MDBoxLayout):
             use_pagination=False,
             rows_num=max(self.items_per_page, 100),  # Garantir que rows_num seja suficiente
             column_data=[
-                ("ID", dp(30), lambda *args: self.sort_column("id")),
-                ("Texto Detectado", dp(200), lambda *args: self.sort_column("text_results")),
-                ("Idioma", dp(50), lambda *args: self.sort_column("source_lang")),
-                ("Confiança Média", dp(50), lambda *args: self.sort_column("confidence")),
-                ("Criado em", dp(60), lambda *args: self.sort_column("created_at")),
-                ("Último Uso", dp(60), lambda *args: self.sort_column("last_used")),
-                ("Contagem de Uso", dp(50), lambda *args: self.sort_column("usage_count"))
+                ("Row", dp(15)),
+                ("ID", dp(25)),
+                ("Txt. Detc.", dp(110)),
+                ("Idioma", dp(35)),
+                ("Confiança", dp(50)),
+                ("Criado em", dp(50)),
+                ("Últ. Uso", dp(50)),
+                ("Cont. de Uso", dp(45))
             ]
         )
         
@@ -280,20 +304,20 @@ class OCRResultsView(MDBoxLayout):
     def show_sort_menu(self, button):
         # Exibe o menu dropdown para seleção de ordenação
         sort_options = [
-            ("ID ↑", "id", "ASC"),
-            ("ID ↓", "id", "DESC"),
-            ("Texto ↑", "text_results", "ASC"),
-            ("Texto ↓", "text_results", "DESC"),
-            ("Idioma ↑", "source_lang", "ASC"),
-            ("Idioma ↓", "source_lang", "DESC"),
-            ("Confiança ↑", "confidence", "ASC"),
-            ("Confiança ↓", "confidence", "DESC"),
-            ("Criação ↑", "created_at", "ASC"),
-            ("Criação ↓", "created_at", "DESC"),
-            ("Último Uso ↑", "last_used", "ASC"),
-            ("Último Uso ↓", "last_used", "DESC"),
-            ("Uso ↑", "usage_count", "ASC"),
-            ("Uso ↓", "usage_count", "DESC")
+            ("ID ^", "id", "ASC"),
+            ("ID v", "id", "DESC"),
+            ("Texto ^", "text_results", "ASC"),
+            ("Texto v", "text_results", "DESC"),
+            ("Idioma ^", "source_lang", "ASC"),
+            ("Idioma v", "source_lang", "DESC"),
+            ("Confiança ^", "confidence", "ASC"),
+            ("Confiança v", "confidence", "DESC"),
+            ("Criação ^", "created_at", "ASC"),
+            ("Criação v", "created_at", "DESC"),
+            ("Último Uso ^", "last_used", "ASC"),
+            ("Último Uso v", "last_used", "DESC"),
+            ("Uso ^", "usage_count", "ASC"),
+            ("Uso v", "usage_count", "DESC")
         ]
         
         menu_items = []
@@ -312,58 +336,21 @@ class OCRResultsView(MDBoxLayout):
         self.sort_menu.open()
     
     def set_lang(self, lang):
+        """Define o idioma selecionado e recarrega os dados com logs detalhados"""
+        logger.debug("[DEBUG] Alterando idioma de '%s' para '%s'", self.selected_lang, lang)
+        
         # Definir idioma selecionado
         self.selected_lang = None if lang == "Todos" else lang
         self.lang_button.text = f"Idioma: {lang}"
+        logger.debug("[DEBUG] Texto do botão de idioma atualizado para: %s", self.lang_button.text)
+        
+        logger.debug("[DEBUG] Fechando menu de idiomas")
         self.lang_menu.dismiss()
+        
+        logger.debug("[DEBUG] Recarregando dados com novo filtro de idioma")
         self.load_data()
     
-    def sort_column(self, column_name):
-        """Gerencia a ordenação das colunas quando o cabeçalho é clicado"""
-        # Se é a mesma coluna, alternar direção
-        if self.current_sort_column == column_name:
-            self.current_sort_direction = 'DESC' if self.current_sort_direction == 'ASC' else 'ASC'
-        else:
-            # Nova coluna, começar com ASC
-            self.current_sort_column = column_name
-            self.current_sort_direction = 'ASC'
-        
-        # Atualizar o texto do botão de ordenação para refletir a mudança
-        self._update_sort_button_text()
-        
-        # Voltar para a primeira página ao ordenar
-        self.page = 1
-        
-        # Recarregar dados com nova ordenação
-        self.load_data()
-        
-        # Obter dados atuais da tabela
-        current_data = self.data_table.row_data
-        
-        # Mapear nome da coluna para índice
-        column_mapping = {
-            "id": 0,
-            "text_results": 1,
-            "source_lang": 2,
-            "confidence": 3,
-            "created_at": 4,
-            "last_used": 5,
-            "usage_count": 6
-        }
-        
-        column_index = column_mapping.get(column_name, 0)
-        
-        # Ordenar dados usando o formato requerido pelo MDDataTable
-        # Formato: [Index, Sorted_Row_Data] usando zip(*sorted(enumerate(data), key=...))
-        if self.current_sort_direction == 'ASC':
-            sorted_data = zip(*sorted(enumerate(current_data), key=lambda l: str(l[1][column_index]).lower()))
-        else:
-            sorted_data = zip(*sorted(enumerate(current_data), key=lambda l: str(l[1][column_index]).lower(), reverse=True))
-        
-        # Converter para listas
-        indices, sorted_rows = map(list, sorted_data)
-        
-        return [indices, sorted_rows]
+
     
     def _update_sort_button_text(self):
         """Atualiza o texto do botão de ordenação com base na coluna e direção atuais"""
@@ -382,32 +369,40 @@ class OCRResultsView(MDBoxLayout):
         column_display = column_names.get(self.current_sort_column, self.current_sort_column)
         
         # Adicionar ícone de direção
-        arrow_icon = "↑" if self.current_sort_direction == "ASC" else "↓"
+        arrow_icon = "^" if self.current_sort_direction == "ASC" else "v"
         
         # Atualizar texto do botão
         self.sort_button.text = f"Ordenar por: {column_display} {arrow_icon}"
     
     def set_sort_option(self, column, direction, display_text):
-        """Define a opção de ordenação selecionada"""
+        """Define a opção de ordenação selecionada com logs detalhados"""
+        logger.debug("[DEBUG] Alterando ordenação de '%s %s' para '%s %s'", 
+                    self.current_sort_column, self.current_sort_direction, column, direction)
+        
         self.current_sort_column = column
         self.current_sort_direction = direction
         
         # Adicionar ícones de seta ao texto do botão para indicar direção
-        arrow_icon = "↑" if direction == "ASC" else "↓"
-        column_name = display_text.replace(" ↑", "").replace(" ↓", "")
+        arrow_icon = "^" if direction == "ASC" else "v"
+        column_name = display_text.replace(" ^", "").replace(" v", "")
         self.sort_button.text = f"Ordenar por: {column_name} {arrow_icon}"
+        logger.debug("[DEBUG] Texto do botão de ordenação atualizado para: %s", self.sort_button.text)
         
+        logger.debug("[DEBUG] Fechando menu de ordenação")
         self.sort_menu.dismiss()
         
         # Voltar para a primeira página ao ordenar
         self.page = 1
+        logger.debug("[DEBUG] Página resetada para 1 devido à mudança de ordenação")
         
         # Recarregar dados com nova ordenação
+        logger.debug("[DEBUG] Recarregando dados com nova ordenação: %s %s", column, direction)
         self.load_data()
-        
-        print(f"[DEBUG] Ordenação aplicada: {column} {direction}")
     
     def load_data(self):
+        """Carrega dados do banco de dados com logs detalhados"""
+        logger.debug("[DEBUG] Iniciando carregamento de dados")
+        
         # Obter dados do banco de dados
         search_text = self.search_field.text
         offset = (self.page - 1) * self.items_per_page
@@ -416,15 +411,19 @@ class OCRResultsView(MDBoxLayout):
         order_by = self.current_sort_column if self.current_sort_column else None
         order_direction = self.current_sort_direction
         
+        logger.debug("[DEBUG] Parâmetros de consulta: página=%d, offset=%d, limite=%d, busca='%s', idioma=%s", 
+                    self.page, offset, self.items_per_page, search_text or 'None', self.selected_lang or 'None')
+        
         if order_by:
-            print(f"[DEBUG] Aplicando ordenação: {order_by} {order_direction}")
+            logger.debug("[DEBUG] Aplicando ordenação: %s %s", order_by, order_direction)
         
         try:
             if not (self.app.db_manager.connection and self.app.db_manager.connection.is_connected()):
-                print("Aviso: Conexão com o banco de dados não está ativa")
+                logger.warning("[ERROR] Conexão com o banco de dados não está ativa")
                 data = []
                 total_count = 0
             else:
+                logger.debug("[DEBUG] Executando consulta no banco de dados")
                 data, total_count = self.app.db_manager.get_ocr_results(
                     offset=offset,
                     limit=self.items_per_page,
@@ -433,8 +432,10 @@ class OCRResultsView(MDBoxLayout):
                     order_by=order_by,
                     order_direction=order_direction
                 )
+                logger.debug("[DEBUG] Consulta executada com sucesso: %d registros encontrados", total_count)
         except Exception as e:
-            print(f"Erro ao carregar dados de OCR: {e}")
+            logger.error("[ERROR] Erro ao carregar dados de OCR: %s", str(e))
+            traceback.print_exc()
             data = []
             total_count = 0
         # Calcular total de páginas
@@ -466,11 +467,17 @@ class OCRResultsView(MDBoxLayout):
         else:
             self.next_button.md_bg_color = (0.2, 0.6, 1, 1)
             self.next_button.text_color = (1, 1, 1, 1)
+        # Criar mapeamento direto: posição visual -> dados reais (similar ao TranslationsView)
+        self.row_mapping = {}  # Mapeamento: índice_visual -> dados_completos_da_linha
+        
         # Formatar dados para a tabela
         table_data = []
         raw_data_for_debug = []  # Para comparação no debug
         
         for i, row in enumerate(data):
+            # Armazenar mapeamento direto da posição visual para os dados reais
+            self.row_mapping[i] = row  # Índice visual -> dados completos
+            
             text_results = row.get('text_results_parsed', {})
             if isinstance(text_results, dict):
                 text = text_results.get('text', '')
@@ -478,17 +485,23 @@ class OCRResultsView(MDBoxLayout):
                 text = text_results[0].get('text', '') if isinstance(text_results[0], dict) else str(text_results[0])
             else:
                 text = ''
-            text_display = (text[:100] + '...') if len(text) > 100 else text
+            # Limitar tamanho do texto para exibição na tabela e remover quebras de linha
+            text = text.replace('\n', ' ').replace('\r', ' ')  # Remover quebras de linha
+            text_display = (text[:80] + '...') if len(text) > 80 else text
+            
             # Usar a confiança diretamente da coluna do banco de dados
             confidence = row.get('confidence', 0)
             confidence_display = f"{confidence:.2f}" if confidence is not None else 'N/A'
+            
             created_at = row.get('created_at')
-            created_at_display = created_at.strftime('%d/%m/%Y %H:%M') if created_at else 'N/A'
+            created_at_display = created_at.strftime('%d/%m/%y %H:%M') if created_at else 'N/A'
+            
             last_used = row.get('last_used')
-            last_used_display = last_used.strftime('%d/%m/%Y %H:%M') if last_used else 'N/A'
+            last_used_display = last_used.strftime('%d/%m/%y %H:%M') if last_used else 'N/A'
             
             # Dados formatados para o grid
             formatted_row = [
+                str(i + 1),  # Row Index (posição visual) - NOVA COLUNA
                 str(row.get('id', 'N/A')),
                 text_display,
                 row.get('source_lang', 'N/A'),
@@ -550,45 +563,75 @@ class OCRResultsView(MDBoxLayout):
             self.load_data()
     
     def change_page(self, direction):
-        # Mudar de página (anterior ou próxima)
+        """Mudar de página (anterior ou próxima) com logs detalhados"""
+        logger.debug("[DEBUG] Mudança de página solicitada: direção=%d, página atual=%d, total de páginas=%d", 
+                    direction, self.page, self.total_pages)
+        
         new_page = self.page + direction
+        logger.debug("[DEBUG] Nova página calculada: %d", new_page)
+        
         if 1 <= new_page <= self.total_pages:
+            logger.debug("[DEBUG] Página válida, mudando para página %d", new_page)
             self.page = new_page
             self.load_data()
         elif new_page < 1:
             # Se tentar ir para uma página menor que 1, ficar na página 1
+            logger.warning("[DEBUG] Tentativa de ir para página %d < 1, mantendo página 1", new_page)
             self.page = 1
             self.load_data()
         elif new_page > self.total_pages:
             # Se tentar ir para uma página maior que o total, ficar na última página
+            logger.warning("[DEBUG] Tentativa de ir para página %d > %d, mantendo última página", new_page, self.total_pages)
             self.page = self.total_pages
             self.load_data()
     
 
     
     def on_row_press(self, instance_table, instance_row):
+        """Método chamado quando uma linha da tabela é pressionada - CORRIGIDO para calcular índice real da linha"""
+        logger.debug("[DEBUG] on_row_press chamado - instance_row.index bruto: %s", instance_row.index)
+        
+        # CORREÇÃO: Calcular o índice real da linha baseado no número de colunas
+        # A tabela tem 8 colunas (7 originais + 1 nova coluna Row), então dividimos o índice por 8
+        number_of_columns = 8
+        real_row_index = instance_row.index // number_of_columns
+        logger.debug("[DEBUG] Índice real da linha calculado: %d (de %d // %d)", real_row_index, instance_row.index, number_of_columns)
+        
         # Verificar se há dados na tabela
-        if not instance_table.row_data or instance_row.index >= len(instance_table.row_data):
+        if not instance_table.row_data or real_row_index >= len(instance_table.row_data):
+            logger.error("[ERROR] Sem dados na tabela ou índice inválido. Dados: %d, Índice real: %d", 
+                        len(instance_table.row_data) if instance_table.row_data else 0, real_row_index)
             return
             
         try:
-            # Obter ID do resultado OCR selecionado
-            row_id = int(instance_table.row_data[instance_row.index][0])
+            # Obter dados da linha usando o índice real calculado
+            row_data = instance_table.row_data[real_row_index]
+            logger.debug("[DEBUG] Dados da linha %d: %s", real_row_index, row_data)
             
-            # Obter dados completos do resultado OCR
-            ocr_result = self.app.db_manager.get_ocr_result_by_id(row_id)
-            if not ocr_result:
+            # Buscar no mapeamento usando o índice real da linha
+            if real_row_index in self.row_mapping:
+                ocr_result = self.row_mapping[real_row_index]
+                logger.debug("[DEBUG] Resultado OCR encontrado no mapeamento:")
+                logger.debug("[DEBUG] ID: %s", ocr_result.get('id'))
+                logger.debug("[DEBUG] Texto detectado: %s...", str(ocr_result.get('text_results_parsed', {}))[:50])
+            else:
+                logger.error("[ERROR] Índice %d não encontrado no mapeamento", real_row_index)
+                logger.debug("[DEBUG] Índices disponíveis no mapeamento: %s", list(self.row_mapping.keys()))
                 return
-        except (IndexError, ValueError):
-            print("Erro ao obter dados da linha selecionada")
+        except (IndexError, ValueError) as e:
+            logger.error("[ERROR] Erro ao obter dados da linha selecionada: %s", str(e))
+            traceback.print_exc()
             return
         
         # Extrair dados
+        logger.debug("[DEBUG] Extraindo dados do resultado OCR ID: %s", ocr_result.get('id'))
         text_results = ocr_result.get('text_results_parsed', {})
         if not text_results and ocr_result.get('text_results'):
             try:
                 text_results = json.loads(ocr_result.get('text_results', '{}'))
-            except json.JSONDecodeError:
+                logger.debug("[DEBUG] text_results parseado com sucesso")
+            except json.JSONDecodeError as e:
+                logger.warning("[ERROR] Erro ao parsear text_results: %s", str(e))
                 text_results = {}
         
         # Verificar se text_results é um dicionário ou uma lista
@@ -628,13 +671,18 @@ class OCRResultsView(MDBoxLayout):
         
         # Adicionar imagem se disponível
         if ocr_result.get('image_base64'):  # image_base64
+            logger.debug("[DEBUG] Carregando imagem base64 para exibição")
             try:
                 # Decodificar imagem base64
                 image_data = base64.b64decode(ocr_result['image_base64'])
+                logger.debug("[DEBUG] Imagem base64 decodificada com sucesso, tamanho: %d bytes", len(image_data))
+                
                 # Criar buffer de imagem
                 buffer = io.BytesIO(image_data)
                 # Carregar imagem
                 coreimage = CoreImage(buffer, ext='png')
+                logger.debug("[DEBUG] CoreImage criada com sucesso")
+                
                 # Criar widget de imagem
                 image = Image(
                     texture=coreimage.texture,
@@ -643,8 +691,12 @@ class OCRResultsView(MDBoxLayout):
                     keep_ratio=True
                 )
                 content_layout.add_widget(image)
+                logger.debug("[DEBUG] Widget de imagem adicionado ao layout")
             except Exception as e:
-                print(f"Erro ao carregar imagem: {e}")
+                logger.error("[ERROR] Erro ao carregar imagem: %s", str(e))
+                traceback.print_exc()
+        else:
+            logger.debug("[DEBUG] Nenhuma imagem base64 disponível para este resultado")
         
         # Adicionar informações de texto
         text_info = f"""**ID:** {ocr_result['id']}\n\n
@@ -663,7 +715,10 @@ class OCRResultsView(MDBoxLayout):
                 text_info += f"- {key}: {value}\n"
         
         # Mostrar diálogo com detalhes do resultado OCR
+        logger.debug("[DEBUG] Criando diálogo de detalhes para resultado OCR ID: %s", ocr_result.get('id'))
+        
         if self.dialog:
+            logger.debug("[DEBUG] Fechando diálogo anterior")
             self.dialog.dismiss()
         
         self.dialog = MDDialog(
@@ -680,6 +735,7 @@ class OCRResultsView(MDBoxLayout):
             ]
         )
         
+        logger.debug("[DEBUG] Exibindo diálogo de detalhes")
         self.dialog.open()
     
     def show_items_per_page_menu(self, instance):
@@ -700,20 +756,30 @@ class OCRResultsView(MDBoxLayout):
         self.items_per_page_menu.open()
 
     def set_items_per_page(self, value):
-        # Atualiza a quantidade de itens por página e recarrega os dados
+        """Atualiza a quantidade de itens por página e recarrega os dados com logs detalhados"""
+        logger.debug("[DEBUG] Alterando itens por página de %d para %d", self.items_per_page, value)
+        
         self.items_per_page = value
         self.items_per_page_button.text = f"{value} por página"
         # Garantir que rows_num seja suficiente para exibir todos os itens solicitados
         self.data_table.rows_num = max(value, 100)
+        logger.debug("[DEBUG] rows_num da tabela atualizado para %d", self.data_table.rows_num)
+        
         self.page = 1
+        logger.debug("[DEBUG] Página resetada para 1, recarregando dados")
+        
         self.items_per_page_menu.dismiss()
+        logger.debug("[DEBUG] Menu de itens por página fechado")
+        
         self.load_data()
     
     def get_all_data_for_export(self):
-        """Obtém todos os dados para exportação sem paginação"""
+        """Obtém todos os dados para exportação sem paginação com logs detalhados"""
+        logger.debug("[DEBUG] Iniciando obtenção de dados para exportação")
+        
         try:
             if not self.app.db_manager.connection or not self.app.db_manager.connection.is_connected():
-                print("Erro: Conexão com o banco de dados não está ativa")
+                logger.error("[ERROR] Conexão com o banco de dados não está ativa")
                 return []
             
             # Construir query base
@@ -734,57 +800,79 @@ class OCRResultsView(MDBoxLayout):
             
             # Adicionar filtro de pesquisa se houver
             if hasattr(self, 'search_field') and self.search_field.text.strip():
+                search_text = self.search_field.text.strip()
                 conditions.append("text_results LIKE %s")
-                params.append(f"%{self.search_field.text.strip()}%")
+                params.append(f"%{search_text}%")
+                logger.debug("[DEBUG] Filtro de pesquisa aplicado: '%s'", search_text)
             
             # Adicionar filtro de idioma se houver
             if hasattr(self, 'selected_lang') and self.selected_lang:
                 conditions.append("source_lang = %s")
                 params.append(self.selected_lang)
+                logger.debug("[DEBUG] Filtro de idioma aplicado: '%s'", self.selected_lang)
             
             # Adicionar condições WHERE se houver
             if conditions:
                 query += " WHERE " + " AND ".join(conditions)
+                logger.debug("[DEBUG] Condições WHERE adicionadas: %s", " AND ".join(conditions))
             
-            # Ordenar por ID decrescente
-            query += " ORDER BY id DESC"
+            # Aplicar ordenação atual
+            if hasattr(self, 'current_sort_column') and self.current_sort_column:
+                order_clause = f" ORDER BY {self.current_sort_column} {self.current_sort_direction}"
+                query += order_clause
+                logger.debug("[DEBUG] Ordenação aplicada: %s %s", self.current_sort_column, self.current_sort_direction)
+            else:
+                # Ordenar por ID decrescente como padrão
+                query += " ORDER BY id DESC"
+                logger.debug("[DEBUG] Ordenação padrão aplicada: id DESC")
+            
+            logger.debug("[DEBUG] Query final para exportação: %s", query)
+            logger.debug("[DEBUG] Parâmetros da query: %s", params)
             
             cursor = self.app.db_manager.connection.cursor(dictionary=True)
             cursor.execute(query, params)
             results = cursor.fetchall()
             cursor.close()
             
+            logger.info("[DEBUG] Dados obtidos para exportação: %d registros", len(results))
             return results
             
         except Exception as e:
-            print(f"Erro ao obter dados para exportação: {e}")
+            logger.error("[ERROR] Erro ao obter dados para exportação: %s", str(e))
+            traceback.print_exc()
             return []
     
     def export_to_csv(self, instance):
-        """Exporta dados para arquivo CSV"""
+        """Exporta dados para arquivo CSV com logs detalhados"""
+        logger.info("[DEBUG] Iniciando exportação para CSV")
         try:
+            logger.debug("[DEBUG] Obtendo dados para exportação")
             data = self.get_all_data_for_export()
             if not data:
+                logger.warning("[ERROR] Nenhum dado disponível para exportação CSV")
                 self.show_export_dialog("Erro", "Nenhum dado disponível para exportação.")
                 return
+            
+            logger.debug("[DEBUG] %d registros obtidos para exportação CSV", len(data))
             
             # Criar nome do arquivo com timestamp
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"ocr_results_export_{timestamp}.csv"
             filepath = os.path.join(os.path.expanduser("~"), "Downloads", filename)
+            logger.debug("[DEBUG] Arquivo CSV será salvo em: %s", filepath)
             
             # Escrever arquivo CSV
             with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
                 writer = csv.writer(csvfile)
                 
-                # Cabeçalho
+                # Cabeçalho (incluindo coluna Row)
                 writer.writerow([
-                    'ID', 'Texto Detectado', 'Idioma', 'Confiança', 
+                    'Row', 'ID', 'Texto Detectado', 'Idioma', 'Confiança', 
                     'Criado em', 'Último Uso', 'Contagem de Uso'
                 ])
                 
                 # Dados
-                for row in data:
+                for index, row in enumerate(data):
                     # Formatar datas
                     created_at = row.get('created_at')
                     created_at = created_at.strftime('%d/%m/%Y %H:%M:%S') if created_at else 'N/A'
@@ -809,6 +897,7 @@ class OCRResultsView(MDBoxLayout):
                         detected_text = ''
                     
                     csv_row = [
+                        str(index + 1),  # Coluna Row
                         row.get('id', ''),
                         detected_text,
                         row.get('source_lang', ''),
@@ -819,27 +908,36 @@ class OCRResultsView(MDBoxLayout):
                     ]
                     writer.writerow(csv_row)
             
+            logger.info("[DEBUG] Arquivo CSV criado com sucesso: %s", filepath)
             self.show_export_dialog("Sucesso", f"Arquivo CSV exportado com sucesso!\nLocal: {filepath}")
             
         except Exception as e:
+            logger.error("[ERROR] Erro ao exportar CSV: %s", str(e))
+            traceback.print_exc()
             self.show_export_dialog("Erro", f"Erro ao exportar CSV: {str(e)}")
     
     def export_to_json(self, instance):
-        """Exporta dados para arquivo JSON"""
+        """Exporta dados para arquivo JSON com logs detalhados"""
+        logger.info("[DEBUG] Iniciando exportação para JSON")
         try:
+            logger.debug("[DEBUG] Obtendo dados para exportação JSON")
             data = self.get_all_data_for_export()
             if not data:
+                logger.warning("[ERROR] Nenhum dado disponível para exportação JSON")
                 self.show_export_dialog("Erro", "Nenhum dado disponível para exportação.")
                 return
+            
+            logger.debug("[DEBUG] %d registros obtidos para exportação JSON", len(data))
             
             # Criar nome do arquivo com timestamp
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"ocr_results_export_{timestamp}.json"
             filepath = os.path.join(os.path.expanduser("~"), "Downloads", filename)
+            logger.debug("[DEBUG] Arquivo JSON será salvo em: %s", filepath)
             
             # Converter dados para formato JSON serializável
             json_data = []
-            for row in data:
+            for index, row in enumerate(data):
                 # Formatar datas para string
                 created_at = row.get('created_at')
                 created_at = created_at.strftime('%Y-%m-%d %H:%M:%S') if created_at else None
@@ -864,6 +962,7 @@ class OCRResultsView(MDBoxLayout):
                     detected_text = ''
                 
                 json_row = {
+                    'row': index + 1,  # Coluna Row
                     'id': row.get('id'),
                     'detected_text': detected_text,
                     'language': row.get('source_lang'),
@@ -885,23 +984,32 @@ class OCRResultsView(MDBoxLayout):
                     'ocr_results': json_data
                 }, jsonfile, indent=2, ensure_ascii=False)
             
+            logger.info("[DEBUG] Arquivo JSON criado com sucesso: %s", filepath)
             self.show_export_dialog("Sucesso", f"Arquivo JSON exportado com sucesso!\nLocal: {filepath}")
             
         except Exception as e:
+            logger.error("[ERROR] Erro ao exportar JSON: %s", str(e))
+            traceback.print_exc()
             self.show_export_dialog("Erro", f"Erro ao exportar JSON: {str(e)}")
     
     def export_to_pdf(self, instance):
-        """Exporta dados para arquivo PDF"""
+        """Exporta dados para arquivo PDF com logs detalhados"""
+        logger.info("[DEBUG] Iniciando exportação para PDF")
         try:
+            logger.debug("[DEBUG] Obtendo dados para exportação PDF")
             data = self.get_all_data_for_export()
             if not data:
+                logger.warning("[ERROR] Nenhum dado disponível para exportação PDF")
                 self.show_export_dialog("Erro", "Nenhum dado disponível para exportação.")
                 return
+            
+            logger.debug("[DEBUG] %d registros obtidos para exportação PDF", len(data))
             
             # Criar nome do arquivo com timestamp
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"ocr_results_export_{timestamp}.pdf"
             filepath = os.path.join(os.path.expanduser("~"), "Downloads", filename)
+            logger.debug("[DEBUG] Arquivo PDF será salvo em: %s", filepath)
             
             # Criar documento PDF em orientação paisagem
             from reportlab.lib.pagesizes import landscape
@@ -933,12 +1041,12 @@ class OCRResultsView(MDBoxLayout):
             elements.append(info_para)
             elements.append(Spacer(1, 20))
             
-            # Preparar cabeçalho da tabela
-            headers = ['ID', 'Texto Detectado', 'Idioma', 'Confiança', 'Criação', 'Últ. Uso', 'Usos']
+            # Preparar cabeçalho da tabela (incluindo coluna Row)
+            headers = ['Row', 'ID', 'Texto Detectado', 'Idioma', 'Confiança', 'Criação', 'Últ. Uso', 'Usos']
             
             # Preparar dados das linhas
             rows_data = []
-            for row in data:
+            for index, row in enumerate(data):
                 # Extrair texto do campo text_results (JSON)
                 text_results = row.get('text_results', '')
                 if text_results:
@@ -969,6 +1077,7 @@ class OCRResultsView(MDBoxLayout):
                 confidence = f"{row.get('confidence', 0):.2f}" if row.get('confidence') is not None else 'N/A'
                 
                 pdf_row = [
+                    str(index + 1),  # Coluna Row
                     str(row.get('id', '')),
                     detected_text,
                     str(row.get('source_lang', '')),
@@ -981,7 +1090,7 @@ class OCRResultsView(MDBoxLayout):
             
             # Dividir dados em páginas (20 linhas por página para garantir que caiba com cabeçalho)
             rows_per_page = 20
-            col_widths = [0.7*inch, 3.5*inch, 1.0*inch, 1.0*inch, 1.2*inch, 1.2*inch, 0.8*inch]
+            col_widths = [0.5*inch, 0.6*inch, 3.2*inch, 0.9*inch, 0.9*inch, 1.1*inch, 1.1*inch, 0.7*inch]
             
             # Estilo comum para todas as tabelas
             table_style = TableStyle([
@@ -1023,13 +1132,18 @@ class OCRResultsView(MDBoxLayout):
             # Construir PDF
             doc.build(elements)
             
+            logger.info("[DEBUG] Arquivo PDF criado com sucesso: %s", filepath)
             self.show_export_dialog("Sucesso", f"Arquivo PDF exportado com sucesso!\nLocal: {filepath}")
             
         except Exception as e:
+            logger.error("[ERROR] Erro ao exportar PDF: %s", str(e))
+            traceback.print_exc()
             self.show_export_dialog("Erro", f"Erro ao exportar PDF: {str(e)}")
     
     def show_export_dialog(self, title, message):
-        """Mostra diálogo de resultado da exportação"""
+        """Mostra diálogo de resultado da exportação com logs"""
+        logger.debug("[DEBUG] Exibindo diálogo de exportação: %s - %s", title, message)
+        
         if hasattr(self, 'export_dialog') and self.export_dialog:
             self.export_dialog.dismiss()
         

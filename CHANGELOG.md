@@ -5,6 +5,30 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.2.0] - 2025-01-21
+
+### ✨ Adicionado
+
+- **Sistema de Filtros Avançados** na interface administrativa
+  - Implementação de filtros de busca por texto em todas as visualizações
+  - Suporte a busca estruturada com `JSON_CONTAINS` para resultados OCR
+  - Filtros por idioma de origem e destino nas traduções
+  - Busca em tempo real com aplicação automática de filtros
+  - Paginação inteligente que mantém filtros ativos
+
+- **Otimização de Consultas SQL**
+  - Uso de `JSON_CONTAINS` para busca precisa em campos JSON
+  - Queries otimizadas para melhor performance com grandes volumes de dados
+  - Índices apropriados para acelerar operações de busca
+  - Logging detalhado de consultas para debug
+
+### 🔄 Alterado
+
+- **Melhorias na Interface de Resultados OCR**
+  - Busca por texto detectado usando estrutura JSON nativa
+  - Filtros mais precisos e eficientes
+  - Exibição melhorada de dados JSON estruturados
+
 ## [1.1.0] - 2024-12-21
 
 ### ✨ Adicionado

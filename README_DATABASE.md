@@ -97,6 +97,51 @@ Armazena estatísticas de uso do serviço:
 - `translation_cache_hits`: Número de hits no cache de tradução
 - `avg_processing_time`: Tempo médio de processamento
 
+## Otimização de Performance
+
+### Índices para Melhor Performance
+
+Para otimizar a performance das consultas, especialmente com grandes volumes de dados, é recomendado criar índices nas tabelas após a criação inicial. O arquivo `setup_database.sql` contém comandos comentados para criar esses índices.
+
+#### Índices Recomendados
+
+**Para a tabela `translations`:**
+```sql
+ALTER TABLE translations ADD INDEX idx_source_lang (source_lang);
+ALTER TABLE translations ADD INDEX idx_target_lang (target_lang);
+ALTER TABLE translations ADD INDEX idx_last_used (last_used);
+ALTER TABLE translations ADD FULLTEXT INDEX idx_original_text (original_text);
+ALTER TABLE translations ADD FULLTEXT INDEX idx_translated_text (translated_text);
+```
+
+**Para a tabela `ocr_results`:**
+```sql
+ALTER TABLE ocr_results ADD INDEX idx_source_lang_ocr (source_lang);
+ALTER TABLE ocr_results ADD INDEX idx_last_used_ocr (last_used);
+ALTER TABLE ocr_results ADD INDEX idx_confidence (confidence);
+-- Para MySQL 8.0+ (otimiza consultas JSON_CONTAINS)
+ALTER TABLE ocr_results ADD INDEX idx_text_results_json ((CAST(text_results AS JSON)));
+```
+
+**Para a tabela `statistics`:**
+```sql
+ALTER TABLE statistics ADD INDEX idx_date (date);
+ALTER TABLE statistics ADD INDEX idx_total_requests (total_requests);
+```
+
+#### Consultas Otimizadas
+
+Com os índices criados, as seguintes consultas terão performance significativamente melhor:
+
+- **Busca por texto em OCR:** Utiliza `JSON_CONTAINS` para busca precisa em campos JSON
+- **Filtros por idioma:** Acelera filtros de idioma de origem e destino
+- **Ordenação por data:** Melhora ordenação por `last_used` e `created_at`
+- **Busca textual:** Acelera buscas em texto original e traduzido
+
+#### Monitoramento de Performance
+
+A interface administrativa inclui logging detalhado das consultas SQL para monitoramento de performance. Verifique os logs para identificar consultas lentas e otimizar conforme necessário.
+
 ## Solução de Problemas
 
 ### Erro de Conexão
