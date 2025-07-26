@@ -23,22 +23,37 @@ Um servidor Python moderno que implementa um serviço de IA para a funcionalidad
 - 📊 **Debug Visual:** Imagens de debug para troubleshooting
 - 💾 **Cache de Banco de Dados:** Armazenamento eficiente de traduções e resultados de OCR em MariaDB
 - 🔄 **Serialização JSON Robusta:** Conversão automática de tipos NumPy para tipos Python padrão
+- ❤️ **Sistema de Heartbeat:** Monitoramento de saúde em tempo real com endpoints dedicados
+- 📈 **Monitoramento de Recursos:** Acompanhamento automático de CPU, memória, GPU, rede e disco
+- 🚨 **Sistema de Alertas:** Detecção proativa de problemas de performance e recursos
+- 🔄 **Tradução Concorrente:** Sistema avançado de tradução com múltiplos provedores simultâneos
+- 🌐 **Deep Translator Integration:** Integração completa com múltiplos serviços de tradução
 
 ## 📁 Estrutura do Projeto
 
 ```
 retroarch_ai_service/
-├── main.py                 # 🌐 Servidor FastAPI principal
+├── main.py                 # 🌐 Servidor FastAPI principal com sistema de heartbeat
 ├── service_logic.py        # 🧠 Lógica de processamento e overlay
 ├── ocr_module.py          # 👁️ Módulo OCR com EasyOCR + GPU
-├── translation_module.py  # 🌍 Módulo de tradução
-├── database.py           # 💾 Módulo de banco de dados MariaDB
+├── translation_module.py  # 🌍 Módulo de tradução principal
+├── translation_module_original.py # 📄 Backup do módulo original
+├── concurrent_translation_module.py # 🔄 Sistema de tradução concorrente
+├── enhanced_translation_module.py # ⚡ Módulo de tradução aprimorado
+├── deep_translator_integration.py # 🌐 Integração com Deep Translator
+├── database.py           # 💾 Módulo de banco de dados MariaDB com heartbeat
 ├── models.py              # 📋 Modelos de dados Pydantic
+├── concurrent_config.py   # ⚙️ Configurações de tradução concorrente
 ├── requirements.txt       # 📦 Dependências Python
 ├── setup_database.sql     # 🛠️ Script SQL para criar banco de dados
+├── create_system_info_tables.sql # 🗄️ Script SQL para tabelas de sistema
 ├── setup_database.bat     # 🪟 Script de configuração para Windows
 ├── setup_database.sh      # 🐧 Script de configuração para Linux
 ├── README_DATABASE.md     # 📚 Documentação do banco de dados
+├── CHANGELOG.md          # 📝 Registro de mudanças
+├── CONCURRENT_TRANSLATION_SUMMARY.md # 📊 Resumo do sistema concorrente
+├── DEEP_TRANSLATOR_INTEGRATION.md # 🌐 Guia de integração Deep Translator
+├── RELATORIO_FINAL_SISTEMA_TRADUCAO.md # 📋 Relatório final do sistema
 ├── .gitignore            # 🚫 Arquivos ignorados pelo Git
 ├── retroarch_admin/       # 🖥️ Interface administrativa KivyMD
 │   ├── main.py           # 🚀 Aplicação principal da interface
@@ -261,6 +276,94 @@ O RetroTranslatorPy agora inclui um sistema de cache de banco de dados MariaDB q
 - Mantém estatísticas de uso para análise de performance
 
 Para configurar o banco de dados, consulte o arquivo [README_DATABASE.md](README_DATABASE.md).
+
+## ❤️ Sistema de Monitoramento de Saúde (Heartbeat)
+
+O RetroTranslatorPy inclui um sistema completo de monitoramento de saúde que permite acompanhar o status do serviço em tempo real:
+
+### 🔍 Endpoints de Monitoramento
+
+#### `/health` - Verificação de Saúde em Tempo Real
+Retorna o status atual do serviço com informações detalhadas:
+
+```bash
+curl http://localhost:4404/health
+```
+
+**Resposta de exemplo:**
+```json
+{
+  "service": "RetroArch AI Service",
+  "status": "healthy",
+  "timestamp": "2025-01-25T10:30:15",
+  "system_info": {
+    "cpu_usage": 25.4,
+    "memory_usage": 68.2,
+    "gpu_usage": 15.8,
+    "disk_usage": 45.1,
+    "network_status": "connected"
+  },
+  "response_time_ms": 125.3,
+  "alerts": []
+}
+```
+
+#### `/health/history` - Histórico de Heartbeats
+Retorna o histórico de heartbeats registrados:
+
+```bash
+curl http://localhost:4404/health/history
+```
+
+#### `/health/summary` - Resumo de Saúde dos Serviços
+Retorna um resumo estatístico dos últimos 24 horas:
+
+```bash
+curl http://localhost:4404/health/summary
+```
+
+### 📊 Monitoramento de Recursos
+
+O sistema monitora automaticamente:
+
+- **CPU:** Uso percentual do processador
+- **Memória:** Uso de RAM do sistema
+- **GPU:** Utilização da placa de vídeo (se disponível)
+- **Disco:** Espaço em disco utilizado
+- **Rede:** Status da conectividade
+- **Tempo de Resposta:** Performance dos endpoints
+
+### 🚨 Sistema de Alertas
+
+O sistema gera alertas automáticos quando:
+
+- **CPU > 80%:** Alto uso de processador
+- **Memória > 85%:** Alto uso de memória
+- **GPU > 90%:** Alto uso da placa de vídeo
+- **Disco > 90%:** Pouco espaço em disco
+- **Tempo de Resposta > 5s:** Performance degradada
+
+### 💾 Armazenamento de Dados
+
+Todos os dados de monitoramento são armazenados na tabela `service_heartbeat` do banco de dados, permitindo:
+
+- Análise histórica de performance
+- Identificação de padrões de uso
+- Detecção proativa de problemas
+- Relatórios de disponibilidade
+
+### 🔧 Configuração de Thresholds
+
+Os limites de alerta podem ser configurados editando as constantes em `main.py`:
+
+```python
+# Thresholds para alertas
+CPU_THRESHOLD = 80.0
+MEMORY_THRESHOLD = 85.0
+GPU_THRESHOLD = 90.0
+DISK_THRESHOLD = 90.0
+RESPONSE_TIME_THRESHOLD = 5000  # ms
+```
 
 ## 🔄 Serialização JSON Robusta
 

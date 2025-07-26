@@ -1,6 +1,6 @@
 # database.py
 
-import mysql.connector
+import pymysql
 import json
 import hashlib
 import time
@@ -16,8 +16,8 @@ DB_CONFIG = {
     'password': '',  # Senha
     'database': 'retroarch_translations',  # Nome do banco de dados
     'charset': 'utf8mb4',  # Conjunto de caracteres
-    'collation': 'utf8mb4_general_ci',  # Collation compatível com MariaDB
-    'use_unicode': True  # Habilita suporte a Unicode
+    'use_unicode': True,  # Habilita suporte a Unicode
+    'autocommit': True  # Habilita autocommit
 }
 
 # Classe para gerenciar a conexão e operações com o banco de dados
@@ -32,12 +32,12 @@ class DatabaseManager:
     def connect(self) -> bool:
         """Estabelece conexão com o banco de dados."""
         try:
-            self.connection = mysql.connector.connect(**self.config)
-            self.cursor = self.connection.cursor(dictionary=True)
+            self.connection = pymysql.connect(**self.config)
+            self.cursor = self.connection.cursor(pymysql.cursors.DictCursor)
             self.connected = True
             print("Conexão com o banco de dados estabelecida com sucesso.")
             return True
-        except mysql.connector.Error as err:
+        except pymysql.Error as err:
             print(f"Erro ao conectar ao banco de dados: {err}")
             self.connected = False
             return False
@@ -53,7 +53,7 @@ class DatabaseManager:
     
     def ensure_connected(self) -> bool:
         """Garante que há uma conexão ativa com o banco de dados."""
-        if not self.connected or not self.connection.is_connected():
+        if not self.connected or not self.connection.open:
             return self.connect()
         return True
     
@@ -112,10 +112,103 @@ class DatabaseManager:
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
             """)
             
+            # Tabelas para informações do sistema
+            self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS system_info_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                
+                -- Informações do Processo
+                process_pid INT NOT NULL,
+                process_name VARCHAR(100) NOT NULL,
+                process_status VARCHAR(50) NOT NULL,
+                process_memory_mb DECIMAL(10,2) NOT NULL,
+                process_started_at DATETIME NOT NULL,
+                
+                -- Informações do Sistema
+                python_psutil_version VARCHAR(20) NOT NULL,
+                platform VARCHAR(50) NOT NULL,
+                
+                -- Índices para otimização
+                INDEX idx_timestamp (timestamp),
+                INDEX idx_process_pid (process_pid),
+                INDEX idx_process_started (process_started_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """)
+            
+            self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS system_network_info (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                system_info_id INT NOT NULL,
+                
+                -- Informações de Rede
+                hostname VARCHAR(255) NOT NULL,
+                local_ip VARCHAR(45) NOT NULL,
+                router_ip VARCHAR(45),
+                external_ip VARCHAR(45),
+                ipv6_address VARCHAR(128),
+                port INT NOT NULL,
+                service_url VARCHAR(500) NOT NULL,
+                mac_address VARCHAR(17) NOT NULL,
+                
+                -- Chave estrangeira
+                FOREIGN KEY (system_info_id) REFERENCES system_info_logs(id) ON DELETE CASCADE,
+                
+                -- Índices
+                INDEX idx_system_info_id (system_info_id),
+                INDEX idx_hostname (hostname),
+                INDEX idx_local_ip (local_ip)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """)
+            
+            self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS system_cpu_info (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                system_info_id INT NOT NULL,
+                
+                -- Informações da CPU
+                cpu_name TEXT,
+                physical_cores INT NOT NULL,
+                logical_cores INT NOT NULL,
+                current_frequency_mhz DECIMAL(10,2),
+                max_frequency_mhz DECIMAL(10,2),
+                cpu_usage_percent DECIMAL(5,2) NOT NULL,
+                
+                -- Chave estrangeira
+                FOREIGN KEY (system_info_id) REFERENCES system_info_logs(id) ON DELETE CASCADE,
+                
+                -- Índices
+                INDEX idx_system_info_id (system_info_id),
+                INDEX idx_cpu_usage (cpu_usage_percent)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """)
+            
+            self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS system_gpu_info (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                system_info_id INT NOT NULL,
+                
+                -- Informações da GPU
+                gpu_index INT NOT NULL, -- Para identificar GPU 1, GPU 2, etc.
+                gpu_name TEXT NOT NULL,
+                gpu_memory VARCHAR(50), -- Ex: "4.0 GB", "1.0 GB", "Não disponível"
+                
+                -- Chave estrangeira
+                FOREIGN KEY (system_info_id) REFERENCES system_info_logs(id) ON DELETE CASCADE,
+                
+                -- Índices
+                INDEX idx_system_info_id (system_info_id),
+                INDEX idx_gpu_index (gpu_index),
+                
+                -- Constraint para evitar duplicação de índice de GPU por sistema
+                UNIQUE KEY unique_gpu_per_system (system_info_id, gpu_index)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """)
+            
             self.connection.commit()
             print("Tabelas criadas ou já existentes.")
             return True
-        except mysql.connector.Error as err:
+        except pymysql.Error as err:
             print(f"Erro ao criar tabelas: {err}")
             return False
     
@@ -151,7 +244,7 @@ class DatabaseManager:
                 print(f"Tradução encontrada no cache para: '{source_text[:30]}...'")
                 return result
             return None
-        except mysql.connector.Error as err:
+        except pymysql.Error as err:
             print(f"Erro ao buscar tradução: {err}")
             return None
     
@@ -175,7 +268,7 @@ class DatabaseManager:
             self.connection.commit()
             print(f"Nova tradução salva no banco de dados: '{source_text[:30]}...'")
             return True
-        except mysql.connector.Error as err:
+        except pymysql.Error as err:
             print(f"Erro ao salvar tradução: {err}")
             return False
     
@@ -228,7 +321,7 @@ class DatabaseManager:
                 print(f"Resultado de OCR encontrado no cache para imagem: {image_hash[:10]}...")
                 return result
             return None
-        except mysql.connector.Error as err:
+        except pymysql.Error as err:
             print(f"Erro ao buscar resultado de OCR: {err}")
             return None
     
@@ -297,7 +390,7 @@ class DatabaseManager:
             self.connection.commit()
             print(f"Novo resultado de OCR salvo no banco de dados para imagem: {image_hash[:10]}...")
             return True
-        except mysql.connector.Error as err:
+        except pymysql.Error as err:
             print(f"Erro ao salvar resultado de OCR: {err}")
             return False
     
@@ -346,7 +439,7 @@ class DatabaseManager:
                                                 processing_time or 0))
             
             self.connection.commit()
-        except mysql.connector.Error as err:
+        except pymysql.Error as err:
             print(f"Erro ao atualizar estatísticas: {err}")
     
     def record_request_processing(self, ocr_hit: bool = False, translation_hit: bool = False, 
@@ -367,9 +460,337 @@ class DatabaseManager:
             """
             self.cursor.execute(query, (days,))
             return self.cursor.fetchall()
-        except mysql.connector.Error as err:
+        except pymysql.Error as err:
             print(f"Erro ao obter estatísticas: {err}")
             return []
+    
+    def save_system_info(self, system_info: dict) -> bool:
+        """Salva as informações do sistema no banco de dados."""
+        if not self.ensure_connected():
+            return False
+        
+        try:
+            # Inserir informações principais do sistema
+            self.cursor.execute("""
+                INSERT INTO system_info_logs (
+                    process_pid, process_name, process_status, process_memory_mb, 
+                    process_started_at, python_psutil_version, platform
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (
+                system_info['process']['pid'],
+                system_info['process']['name'],
+                system_info['process']['status'],
+                system_info['process']['memory_mb'],
+                system_info['process']['started_at'],
+                system_info['process']['psutil_version'],
+                system_info['process']['platform']
+            ))
+            
+            # Obter o ID do registro principal inserido
+            system_info_id = self.cursor.lastrowid
+            
+            # Inserir informações de rede
+            self.cursor.execute("""
+                INSERT INTO system_network_info (
+                    system_info_id, hostname, local_ip, router_ip, external_ip, 
+                    ipv6_address, port, service_url, mac_address
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                system_info_id,
+                system_info['network']['hostname'],
+                system_info['network']['local_ip'],
+                system_info['network'].get('router_ip'),
+                system_info['network'].get('external_ip'),
+                system_info['network'].get('ipv6'),
+                system_info['network']['port'],
+                system_info['network']['url'],
+                system_info['network']['mac_address']
+            ))
+            
+            # Inserir informações de CPU
+            self.cursor.execute("""
+                INSERT INTO system_cpu_info (
+                    system_info_id, cpu_name, physical_cores, logical_cores, 
+                    current_frequency_mhz, max_frequency_mhz, cpu_usage_percent
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (
+                system_info_id,
+                system_info['cpu'].get('name'),
+                system_info['cpu']['physical_cores'],
+                system_info['cpu']['logical_cores'],
+                system_info['cpu'].get('current_freq'),
+                system_info['cpu'].get('max_freq'),
+                system_info['cpu']['usage_percent']
+            ))
+            
+            # Inserir informações de GPU(s)
+            if 'gpu' in system_info and system_info['gpu']:
+                for idx, gpu in enumerate(system_info['gpu']):
+                    self.cursor.execute("""
+                        INSERT INTO system_gpu_info (
+                            system_info_id, gpu_index, gpu_name, gpu_memory
+                        ) VALUES (%s, %s, %s, %s)
+                    """, (
+                        system_info_id,
+                        idx + 1,  # GPU index começa em 1
+                        gpu['name'],
+                        gpu.get('memory', 'Não disponível')
+                    ))
+            
+            self.connection.commit()
+            print(f"Informações do sistema salvas com ID: {system_info_id}")
+            return True
+            
+        except pymysql.Error as err:
+            print(f"Erro ao salvar informações do sistema: {err}")
+            self.connection.rollback()
+            return False
+        except Exception as err:
+            print(f"Erro inesperado ao salvar informações do sistema: {err}")
+            self.connection.rollback()
+            return False
+    
+    def get_latest_system_info(self) -> dict:
+        """Obtém as informações mais recentes do sistema."""
+        if not self.ensure_connected():
+            return {}
+        
+        try:
+            # Buscar informações principais mais recentes
+            self.cursor.execute("""
+                SELECT id, timestamp, process_pid, process_name, process_status, 
+                       process_memory_mb, process_started_at, python_psutil_version, platform
+                FROM system_info_logs 
+                ORDER BY timestamp DESC 
+                LIMIT 1
+            """)
+            
+            main_info = self.cursor.fetchone()
+            if not main_info:
+                return {}
+            
+            system_info_id = main_info['id']
+            
+            # Buscar informações de rede
+            self.cursor.execute("""
+                SELECT hostname, local_ip, router_ip, external_ip, ipv6_address, 
+                       port, service_url, mac_address
+                FROM system_network_info 
+                WHERE system_info_id = %s
+            """, (system_info_id,))
+            
+            network_info = self.cursor.fetchone()
+            
+            # Buscar informações de CPU
+            self.cursor.execute("""
+                SELECT cpu_name, physical_cores, logical_cores, current_frequency_mhz, 
+                       max_frequency_mhz, cpu_usage_percent
+                FROM system_cpu_info 
+                WHERE system_info_id = %s
+            """, (system_info_id,))
+            
+            cpu_info = self.cursor.fetchone()
+            
+            # Buscar informações de GPU(s)
+            self.cursor.execute("""
+                SELECT gpu_index, gpu_name, gpu_memory
+                FROM system_gpu_info 
+                WHERE system_info_id = %s
+                ORDER BY gpu_index
+            """, (system_info_id,))
+            
+            gpu_info = self.cursor.fetchall()
+            
+            # Montar o dicionário de resposta
+            result = {
+                'id': main_info['id'],
+                'timestamp': main_info['timestamp'].isoformat() if main_info['timestamp'] else None,
+                'process': {
+                    'pid': main_info['process_pid'],
+                    'name': main_info['process_name'],
+                    'status': main_info['process_status'],
+                    'memory_mb': float(main_info['process_memory_mb']) if main_info['process_memory_mb'] else 0,
+                    'started_at': main_info['process_started_at'].isoformat() if main_info['process_started_at'] else None,
+                    'psutil_version': main_info['python_psutil_version'],
+                    'platform': main_info['platform']
+                }
+            }
+            
+            if network_info:
+                result['network'] = {
+                    'hostname': network_info['hostname'],
+                    'local_ip': network_info['local_ip'],
+                    'router_ip': network_info['router_ip'],
+                    'external_ip': network_info['external_ip'],
+                    'ipv6': network_info['ipv6_address'],
+                    'port': network_info['port'],
+                    'url': network_info['service_url'],
+                    'mac_address': network_info['mac_address']
+                }
+            
+            if cpu_info:
+                result['cpu'] = {
+                    'name': cpu_info['cpu_name'],
+                    'physical_cores': cpu_info['physical_cores'],
+                    'logical_cores': cpu_info['logical_cores'],
+                    'current_freq': float(cpu_info['current_frequency_mhz']) if cpu_info['current_frequency_mhz'] else None,
+                    'max_freq': float(cpu_info['max_frequency_mhz']) if cpu_info['max_frequency_mhz'] else None,
+                    'usage_percent': float(cpu_info['cpu_usage_percent']) if cpu_info['cpu_usage_percent'] else 0
+                }
+            
+            if gpu_info:
+                result['gpu'] = []
+                for gpu in gpu_info:
+                    result['gpu'].append({
+                        'index': gpu['gpu_index'],
+                        'name': gpu['gpu_name'],
+                        'memory': gpu['gpu_memory']
+                    })
+            
+            return result
+            
+        except pymysql.Error as err:
+            print(f"Erro ao obter informações do sistema: {err}")
+            return {}
+        except Exception as err:
+            print(f"Erro inesperado ao obter informações do sistema: {err}")
+            return {}
+
+    def save_heartbeat(self, service_name: str, status: str, response_time_ms: int = None, error_message: str = None) -> bool:
+        """Salva um registro de heartbeat na tabela service_heartbeat."""
+        if not self.ensure_connected():
+            return False
+        
+        try:
+            self.cursor.execute("""
+                INSERT INTO service_heartbeat (service_name, status, response_time_ms, error_message)
+                VALUES (%s, %s, %s, %s)
+            """, (service_name, status, response_time_ms, error_message))
+            
+            self.connection.commit()
+            return True
+            
+        except pymysql.Error as err:
+            print(f"Erro ao salvar heartbeat: {err}")
+            return False
+        except Exception as err:
+            print(f"Erro inesperado ao salvar heartbeat: {err}")
+            return False
+    
+    def get_latest_heartbeat(self, service_name: str = None) -> dict:
+        """Obtém o último heartbeat registrado para um serviço específico ou todos os serviços."""
+        if not self.ensure_connected():
+            return {}
+        
+        try:
+            if service_name:
+                self.cursor.execute("""
+                    SELECT id, service_name, status, response_time_ms, error_message, timestamp
+                    FROM service_heartbeat 
+                    WHERE service_name = %s
+                    ORDER BY timestamp DESC 
+                    LIMIT 1
+                """, (service_name,))
+                
+                result = self.cursor.fetchone()
+                if result:
+                    return {
+                        'id': result['id'],
+                        'service_name': result['service_name'],
+                        'status': result['status'],
+                        'response_time_ms': result['response_time_ms'],
+                        'error_message': result['error_message'],
+                        'timestamp': result['timestamp'].isoformat() if result['timestamp'] else None
+                    }
+            else:
+                # Retorna o último heartbeat de cada serviço
+                self.cursor.execute("""
+                    SELECT h1.id, h1.service_name, h1.status, h1.response_time_ms, h1.error_message, h1.timestamp
+                    FROM service_heartbeat h1
+                    INNER JOIN (
+                        SELECT service_name, MAX(timestamp) as max_timestamp
+                        FROM service_heartbeat
+                        GROUP BY service_name
+                    ) h2 ON h1.service_name = h2.service_name AND h1.timestamp = h2.max_timestamp
+                    ORDER BY h1.timestamp DESC
+                """)
+                
+                results = self.cursor.fetchall()
+                heartbeats = []
+                for result in results:
+                    heartbeats.append({
+                        'id': result['id'],
+                        'service_name': result['service_name'],
+                        'status': result['status'],
+                        'response_time_ms': result['response_time_ms'],
+                        'error_message': result['error_message'],
+                        'timestamp': result['timestamp'].isoformat() if result['timestamp'] else None
+                    })
+                return {'heartbeats': heartbeats}
+            
+            return {}
+            
+        except pymysql.Error as err:
+            print(f"Erro ao obter heartbeat: {err}")
+            return {}
+        except Exception as err:
+            print(f"Erro inesperado ao obter heartbeat: {err}")
+            return {}
+    
+    def get_service_health_summary(self) -> dict:
+        """Obtém um resumo da saúde de todos os serviços baseado nos últimos heartbeats."""
+        if not self.ensure_connected():
+            return {}
+        
+        try:
+            # Conta heartbeats por status nas últimas 24 horas
+            self.cursor.execute("""
+                SELECT 
+                    service_name,
+                    status,
+                    COUNT(*) as count,
+                    MAX(timestamp) as last_heartbeat,
+                    AVG(response_time_ms) as avg_response_time
+                FROM service_heartbeat 
+                WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+                GROUP BY service_name, status
+                ORDER BY service_name, status
+            """)
+            
+            results = self.cursor.fetchall()
+            
+            # Organiza os dados por serviço
+            services = {}
+            for result in results:
+                service_name = result['service_name']
+                if service_name not in services:
+                    services[service_name] = {
+                        'service_name': service_name,
+                        'status_counts': {},
+                        'last_heartbeat': None,
+                        'avg_response_time': None
+                    }
+                
+                services[service_name]['status_counts'][result['status']] = result['count']
+                
+                # Atualiza o último heartbeat se for mais recente
+                if (services[service_name]['last_heartbeat'] is None or 
+                    result['last_heartbeat'] > services[service_name]['last_heartbeat']):
+                    services[service_name]['last_heartbeat'] = result['last_heartbeat'].isoformat() if result['last_heartbeat'] else None
+                    services[service_name]['avg_response_time'] = float(result['avg_response_time']) if result['avg_response_time'] else None
+            
+            return {
+                'summary_period': '24_hours',
+                'services': list(services.values()),
+                'total_services': len(services)
+            }
+            
+        except pymysql.Error as err:
+            print(f"Erro ao obter resumo de saúde: {err}")
+            return {}
+        except Exception as err:
+            print(f"Erro inesperado ao obter resumo de saúde: {err}")
+            return {}
 
 # Função para calcular o hash de uma imagem (bytes)
 def calculate_image_hash(image_bytes: bytes) -> str:

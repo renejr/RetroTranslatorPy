@@ -20,6 +20,12 @@ USE retroarch_translations;
 
 -- As tabelas serão criadas automaticamente pela aplicação quando ela for iniciada
 -- Veja o arquivo database.py para a definição das tabelas
+-- 
+-- Tabelas criadas automaticamente:
+-- - translations: Cache de traduções
+-- - ocr_results: Cache de resultados OCR
+-- - statistics: Estatísticas de uso
+-- - service_heartbeat: Monitoramento de saúde do serviço (pack0013)
 
 -- Índices para otimização de performance (executar após criação das tabelas)
 -- Estes índices melhoram a performance das consultas de busca e filtros

@@ -369,14 +369,9 @@ def is_mostly_portuguese(text: str) -> bool:
     
     return portuguese_count > len(words) * 0.3  # Se mais de 30% das palavras parecem portuguesas
 
-# O sistema de tradução concorrente será importado dinamicamente quando necessário
-enhanced_translate_text = None
-
-import asyncio
-
 async def translate_text(text: str, target_lang: str = 'en', source_lang: str = 'auto') -> str:
     """
-    Traduz um texto de um idioma de origem para um idioma de destino usando o sistema concorrente.
+    Traduz um texto de um idioma de origem para um idioma de destino.
     Inclui correções de OCR e dicionário de termos de jogos.
 
     Args:
@@ -437,34 +432,68 @@ async def translate_text(text: str, target_lang: str = 'en', source_lang: str = 
         if game_translated != corrected_text:
             print(f"Módulo de Tradução: Texto após tradução de termos de jogos: '{game_translated}'")
         
-        # Etapa 4: Usar o sistema de tradução concorrente aprimorado
-        # Importar dinamicamente para evitar importação circular
-        global enhanced_translate_text
-        if enhanced_translate_text is None:
-            try:
-                from enhanced_concurrent_translation import enhanced_translate_text as ect
-                enhanced_translate_text = ect
-                print(f"Módulo de Tradução: Sistema de tradução concorrente carregado com sucesso")
-            except ImportError as e:
-                print(f"Módulo de Tradução: Não foi possível carregar sistema concorrente: {e}")
-                enhanced_translate_text = False  # Marcar como falha para não tentar novamente
+        # Etapa 4: Traduzir o restante usando múltiplos tradutores com sistema de fallback
+        # Lista de tradutores a tentar, em ordem de preferência
+        translators_to_try = ['google', 'bing', 'deepl', 'baidu', 'youdao']
         
-        if enhanced_translate_text and enhanced_translate_text is not False:
-            print(f"Módulo de Tradução: Usando sistema de tradução concorrente")
+        # Tentar cada tradutor em sequência
+        final_translated = None
+        translation_errors = []
+        
+        for translator in translators_to_try:
+            try:
+                print(f"Módulo de Tradução: Tentando tradutor: {translator}")
+                final_translated = ts.translate_text(
+                    game_translated,
+                    translator=translator,
+                    from_language=source_lang,
+                    to_language=target_lang
+                )
+                print(f"Módulo de Tradução: Tradução bem-sucedida com {translator}")
+                break  # Se a tradução for bem-sucedida, sair do loop
+            except Exception as e:
+                error_msg = f"Erro com tradutor {translator}: {str(e)}"
+                print(f"Módulo de Tradução: {error_msg}")
+                translation_errors.append(error_msg)
+                continue  # Tentar o próximo tradutor
+        
+        # Se todos os tradutores falharem, tentar tradução palavra por palavra
+        if final_translated is None:
+            print(f"Módulo de Tradução: Todos os tradutores falharam. Tentando tradução palavra por palavra...")
+            words = game_translated.split()
+            translated_words = []
             
-            # Chamar o sistema de tradução concorrente
-            final_translated = await enhanced_translate_text(
-                text=game_translated,
-                target_lang=target_lang,
-                source_lang=source_lang
-            )
+            for word in words:
+                if len(word) <= 2:  # Palavras muito curtas
+                    translated_words.append(word)
+                    continue
+                    
+                # Tentar cada tradutor para cada palavra
+                word_translated = None
+                for translator in translators_to_try:
+                    try:
+                        word_translated = ts.translate_text(
+                            word,
+                            translator=translator,
+                            from_language=source_lang,
+                            to_language=target_lang
+                        )
+                        break  # Se a tradução for bem-sucedida, sair do loop
+                    except:
+                        continue  # Tentar o próximo tradutor
+                
+                # Se todos os tradutores falharem para esta palavra, manter a palavra original
+                if word_translated:
+                    translated_words.append(word_translated)
+                else:
+                    translated_words.append(word)
             
-            if not final_translated:  # Se falhar
-                print(f"Módulo de Tradução: Sistema concorrente falhou. Retornando texto com tradução de termos de jogos.")
-                final_translated = game_translated  # Retornar o texto com tradução parcial de termos de jogos
-        else:
-            print(f"Módulo de Tradução: Sistema concorrente não disponível. Usando tradução básica de termos de jogos.")
-            final_translated = game_translated  # Usar apenas a tradução de termos de jogos
+            final_translated = ' '.join(translated_words)
+            print(f"Módulo de Tradução: Tradução palavra por palavra concluída")
+        
+        if not final_translated:  # Se ainda assim falhar
+            print(f"Módulo de Tradução: Falha em todos os métodos de tradução. Retornando texto original.")
+            final_translated = game_translated  # Retornar o texto com tradução parcial de termos de jogos
             
         print(f"Módulo de Tradução: Texto final traduzido: '{final_translated}'")
         
@@ -472,10 +501,4 @@ async def translate_text(text: str, target_lang: str = 'en', source_lang: str = 
         
     except Exception as e:
         print(f"Erro no módulo de tradução: {e}")
-        # Em caso de erro, tentar retornar pelo menos a tradução de termos de jogos
-        try:
-            corrected_text = correct_ocr_errors(text)
-            game_translated = translate_game_terms(corrected_text, target_lang)
-            return game_translated
-        except:
-            return text  # Último recurso: retornar texto original
+        return f"Erro ao traduzir: {e}"
