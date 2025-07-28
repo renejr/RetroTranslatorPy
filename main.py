@@ -7,6 +7,8 @@ import psutil
 import socket
 import uuid
 import time
+import argparse
+import sys
 from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from contextlib import asynccontextmanager
@@ -527,41 +529,38 @@ async def health_check():
         "response_time_ms": 0
     }
     
-    overall_status = "healthy"
     error_messages = []
     
     try:
         # 1. Verificar conexão com banco de dados
         db_start = time.time()
         try:
-            if db_manager.ensure_connected():
-                db_status = "healthy"
-                # Teste simples de query
-                db_manager.cursor.execute("SELECT 1")
-                db_manager.cursor.fetchone()
+            db_status = db_manager.test_connection()
+            if db_status:
+                db_health = "healthy"
             else:
-                db_status = "critical"
-                error_messages.append("Falha na conexão com banco de dados")
+                db_health = "warning"
+                error_messages.append("Banco de dados não conectado")
         except Exception as e:
-            db_status = "critical"
+            db_health = "critical"
             error_messages.append(f"Erro no banco de dados: {str(e)}")
         
         db_time = (time.time() - db_start) * 1000
         health_status["components"]["database"] = {
-            "status": db_status,
+            "status": db_health,
             "response_time_ms": round(db_time, 2)
         }
         
         # 2. Verificar módulos críticos
         modules_start = time.time()
         try:
-            # Testa importação dos módulos críticos
+            # Tenta importar módulos críticos
             from service_logic import process_ai_request
             from models import RetroArchRequest
             modules_status = "healthy"
         except Exception as e:
             modules_status = "critical"
-            error_messages.append(f"Erro nos módulos críticos: {str(e)}")
+            error_messages.append(f"Erro ao carregar módulos: {str(e)}")
         
         modules_time = (time.time() - modules_start) * 1000
         health_status["components"]["modules"] = {
@@ -572,23 +571,15 @@ async def health_check():
         # 3. Verificar recursos do sistema
         system_start = time.time()
         try:
-            # Verifica uso de CPU
-            cpu_percent = psutil.cpu_percent(interval=0.1)
+            # Verificar uso de memória e CPU
             memory = psutil.virtual_memory()
+            cpu_percent = psutil.cpu_percent(interval=0.1)
             
-            # Define thresholds
-            cpu_threshold = 90.0  # 90% CPU
-            memory_threshold = 90.0  # 90% Memória
-            
-            if cpu_percent > cpu_threshold:
+            if memory.percent > 90 or cpu_percent > 95:
                 system_status = "warning"
-                error_messages.append(f"Alto uso de CPU: {cpu_percent}%")
-            elif memory.percent > memory_threshold:
-                system_status = "warning"
-                error_messages.append(f"Alto uso de memória: {memory.percent}%")
+                error_messages.append(f"Recursos do sistema sob pressão (CPU: {cpu_percent}%, RAM: {memory.percent}%)")
             else:
                 system_status = "healthy"
-                
         except Exception as e:
             system_status = "warning"
             error_messages.append(f"Erro ao verificar recursos do sistema: {str(e)}")
@@ -741,13 +732,58 @@ async def health_summary():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao obter resumo de saúde: {str(e)}")
 
+def parse_arguments():
+    """
+    Analisa argumentos da linha de comando para configuração do servidor.
+    """
+    parser = argparse.ArgumentParser(
+        description="RetroArch AI Service - Serviço de tradução com IA para o RetroArch",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Exemplos de uso:
+  python main.py                           # Usa configurações padrão (0.0.0.0:4404)
+  python main.py --port 8080               # Usa porta 8080 com host padrão
+  python main.py --host 127.0.0.1          # Usa host específico com porta padrão
+  python main.py --host 192.168.1.100 --port 9000  # Configuração customizada completa
+        """
+    )
+    
+    parser.add_argument(
+        '--host',
+        type=str,
+        default='0.0.0.0',
+        help='Host para o servidor (padrão: 0.0.0.0 - todas as interfaces)'
+    )
+    
+    parser.add_argument(
+        '--port',
+        type=int,
+        default=4404,
+        help='Porta para o servidor (padrão: 4404)'
+    )
+    
+    parser.add_argument(
+        '--version',
+        action='version',
+        version='RetroArch AI Service v1.1.0'
+    )
+    
+    return parser.parse_args()
+
 # Permite executar o servidor diretamente com 'python main.py'
 if __name__ == "__main__":
-    # Este bloco permite executar o servidor diretamente com 'python main.py'.
-    # A porta foi ajustada para 4404 para corresponder à configuração usada no ambiente de desenvolvimento.
+    # Analisa argumentos da linha de comando
+    args = parse_arguments()
     
-    port = 4404
-    host = "0.0.0.0"
+    # Extrai host e porta dos argumentos
+    host = args.host
+    port = args.port
+    
+    print(f"\n🚀 RETROARCH AI SERVICE")
+    print(f"📋 Configuração:")
+    print(f"   • Host: {host}")
+    print(f"   • Porta: {port}")
+    print(f"   • URL: http://{host if host != '0.0.0.0' else 'localhost'}:{port}")
     
     # Exibe informações detalhadas do sistema
     display_system_info(port)
@@ -759,4 +795,6 @@ if __name__ == "__main__":
         print("👋 Encerrando RetroArch AI Service...")
     except Exception as e:
         print(f"\n❌ Erro ao iniciar servidor: {e}")
-        print("🔧 Verifique se a porta 4404 está disponível")
+        print(f"🔧 Verifique se a porta {port} está disponível")
+        print(f"💡 Tente usar uma porta diferente: python main.py --port {port + 1}")
+        sys.exit(1)
